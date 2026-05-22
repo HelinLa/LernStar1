@@ -1320,6 +1320,46 @@ ul { list-style: none; }
   transition: border-color .15s;
 }
 .chat-input:focus { border-color: #7C3AED; background: #fff; }
+.chat-img-btn {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  border: 1.5px solid #E5E7EB;
+  background: #F9FAFB;
+  color: #6B7280;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: all .15s;
+}
+.chat-img-btn:hover { background: #EEF2FF; color: #7C3AED; border-color: #7C3AED; }
+.chat-img-btn.has-img { background: #EEF2FF; color: #7C3AED; border-color: #7C3AED; }
+
+.chat-img-preview {
+  margin: 0 12px 6px;
+  position: relative;
+  display: inline-block;
+}
+.chat-img-preview img {
+  max-height: 100px;
+  max-width: 100%;
+  border-radius: 10px;
+  border: 2px solid #7C3AED;
+  display: block;
+}
+.chat-img-remove {
+  position: absolute;
+  top: -6px; right: -6px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: #EF4444;
+  color: #fff;
+  font-size: .65rem;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  line-height: 1;
+}
+
 .chat-mic-btn {
   width: 38px; height: 38px;
   border-radius: 50%;

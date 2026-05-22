@@ -1763,12 +1763,55 @@ function _chatHideTyping() {
   document.getElementById('chatTyping')?.remove();
 }
 
-async function _chatAsk(question) {
-  const sendBtn = document.getElementById('chatSend');
-  const input   = document.getElementById('chatInput');
+let _chatImageB64  = null;   // base64-String des hochgeladenen Bildes
+let _chatImageMime = null;   // z.B. "image/jpeg"
 
-  _chatAddBubble(question, 'user');
-  input.value   = '';
+function _chatSetImage(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const dataUrl = e.target.result;
+    _chatImageMime = file.type || 'image/jpeg';
+    _chatImageB64  = dataUrl.split(',')[1];
+    const preview  = document.getElementById('chatImgPreview');
+    const thumb    = document.getElementById('chatImgThumb');
+    const imgBtn   = document.querySelector('.chat-img-btn');
+    thumb.src      = dataUrl;
+    preview.style.display = 'block';
+    imgBtn?.classList.add('has-img');
+    document.getElementById('chatInput').placeholder = 'Zusatzfrage zum Bild (optional)…';
+  };
+  reader.readAsDataURL(file);
+}
+
+function _chatClearImage() {
+  _chatImageB64  = null;
+  _chatImageMime = null;
+  document.getElementById('chatImgPreview').style.display = 'none';
+  document.getElementById('chatImgThumb').src = '';
+  document.getElementById('chatImgInput').value = '';
+  document.querySelector('.chat-img-btn')?.classList.remove('has-img');
+  document.getElementById('chatInput').placeholder = 'Frage schreiben, sprechen oder Bild hochladen…';
+}
+
+async function _chatAsk(question) {
+  const sendBtn  = document.getElementById('chatSend');
+  const input    = document.getElementById('chatInput');
+  const hasImage = !!_chatImageB64;
+  const imgB64   = _chatImageB64;
+  const imgMime  = _chatImageMime;
+
+  // Bubble anzeigen
+  if (hasImage) {
+    const thumb = document.getElementById('chatImgThumb').src;
+    const label = question ? `📷 ${question}` : '📷 Bitte diese Aufgabe lösen und erklären';
+    _chatAddBubble(`<img src="${thumb}" style="max-width:180px;border-radius:8px;display:block;margin-bottom:6px">${label}`, 'user');
+  } else {
+    _chatAddBubble(question, 'user');
+  }
+
+  input.value = '';
+  _chatClearImage();
   sendBtn.disabled = true;
   _chatShowTyping();
 
@@ -1780,6 +1823,18 @@ async function _chatAsk(question) {
   }
 
   try {
+    let userContent;
+    if (hasImage) {
+      userContent = [
+        { type: 'image_url', image_url: { url: `data:${imgMime};base64,${imgB64}` } },
+        { type: 'text', text: question || 'Bitte löse diese Aufgabe Schritt für Schritt und erkläre den Lösungsweg auf einfache Weise auf Deutsch.' },
+      ];
+    } else {
+      userContent = question;
+    }
+
+    const model = hasImage ? 'meta-llama/llama-4-scout-17b-16e-instruct' : 'llama-3.1-8b-instant';
+
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -1787,12 +1842,12 @@ async function _chatAsk(question) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
+        model,
         messages: [
           { role: 'system', content: CHAT_SYSTEM },
-          { role: 'user',   content: question },
+          { role: 'user',   content: userContent },
         ],
-        max_tokens: 400,
+        max_tokens: 600,
         temperature: 0.7,
       }),
     });
@@ -1833,7 +1888,20 @@ document.getElementById('chatOverlay')?.addEventListener('click', _chatClose);
 document.getElementById('chatForm')?.addEventListener('submit', e => {
   e.preventDefault();
   const q = document.getElementById('chatInput').value.trim();
-  if (q) _chatAsk(q);
+  if (q || _chatImageB64) _chatAsk(q);
+});
+document.getElementById('chatImgInput')?.addEventListener('change', e => {
+  const file = e.target.files?.[0];
+  if (file) _chatSetImage(file);
+});
+document.getElementById('chatImgRemove')?.addEventListener('click', _chatClearImage);
+
+// Drag & Drop Bild in Chat
+document.getElementById('chatMessages')?.addEventListener('dragover', e => e.preventDefault());
+document.getElementById('chatMessages')?.addEventListener('drop', e => {
+  e.preventDefault();
+  const file = e.dataTransfer.files?.[0];
+  if (file?.type.startsWith('image/')) _chatSetImage(file);
 });
 
 // ---- Spracheingabe ----
