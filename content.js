@@ -815,7 +815,7 @@ const CONTENT = {
               { q:'P(X = k) = C(n,k) × pᵏ × (1–p)ⁿ⁻ᵏ. Was ist C(4,2)?', hint:'4!/(2!×2!) = 24/4', options:['2','4','6','8'], correct:2, explanation:'C(4,2) = 6.' },
               { q:'Münze 4×: P(genau 2× Kopf)? p = 0,5', hint:'C(4,2) × 0,5² × 0,5² = 6 × 0,0625', options:['0,125','0,25','0,375','0,5'], correct:2, explanation:'6 × 0,5⁴ = 6/16 = 0,375.' },
               { q:'Standardabweichung σ bei B(25; 0,4)?', hint:'σ = √(n × p × (1–p))', options:['√4 = 2','√6 = 2,45','√10 = 3,16','√25 = 5'], correct:1, explanation:'σ = √(25 × 0,4 × 0,6) = √6 ≈ 2,45.' },
-              { q:'Was ist P(X ≤ 2) bei B(5; 0,5)?', hint:'P(0) + P(1) + P(2) addieren.', options:['0,125','0,3125','0,5','0,6875'], correct:3, explanation:'P(0)+P(1)+P(2) = 1/32+5/32+10/32 = 16/32 = 0,5. Hmm – richtig: 0,5. Wähle 0,5.'], correct:2, explanation:'P(X≤2) = P(0)+P(1)+P(2) = 0,03125+0,15625+0,3125 = 0,5.' },
+              { q:'Was ist P(X ≤ 2) bei B(5; 0,5)?', hint:'P(0) + P(1) + P(2) addieren.', options:['0,125','0,3125','0,5','0,6875'], correct:2, explanation:'P(X≤2) = P(0)+P(1)+P(2) = 1/32+5/32+10/32 = 16/32 = 0,5.' },
               { q:'Für welches k ist P(X = k) bei B(10; 0,5) am größten?', hint:'Binomialverteilung ist symmetrisch um μ.', options:['k = 0','k = 5','k = 10','k = 2'], correct:1, explanation:'Bei p = 0,5 ist die Verteilung symmetrisch mit Maximum bei μ = n × p = 5.' },
               { q:'Was bedeutet "kumulierte Wahrscheinlichkeit" P(X ≤ 3)?', hint:'Alle Wahrscheinlichkeiten bis k = 3 aufaddieren.', options:['Nur P(X = 3)','P(X = 0) + ... + P(X = 3)','P(X > 3)','P(X = 3) × 3'], correct:1, explanation:'P(X ≤ 3) = Summe von P(X = 0) bis P(X = 3).' },
             ]
