@@ -139,11 +139,7 @@
           <!-- 3D VRM Avatar -->
           <div class="mascot-wrap">
             <div class="vrm-wrap" id="avatarAnim">
-              <canvas id="vrmCanvas" class="vrm-canvas"></canvas>
-              <div class="vrm-loading" id="vrmLoading">
-                <div class="vrm-spinner"></div>
-                <span>Lade Avatar…</span>
-              </div>
+              <img src="avatar.png" id="avatarImg" class="avatar-img" alt="Herr Lala" onerror="this.src='avatar.svg.png'">
               <div class="talk-wave" id="talkWave"><span></span><span></span><span></span></div>
             </div>
             <!-- Fallback SVG -->
@@ -402,87 +398,9 @@
     });
   }
 </script>
-<script type="module">
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js';
-import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/loaders/GLTFLoader.js';
-import { VRMLoaderPlugin, VRMUtils } from 'https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@2/lib/three-vrm.module.js';
-import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/controls/OrbitControls.js';
-
-const canvas  = document.getElementById('vrmCanvas');
-const loading = document.getElementById('vrmLoading');
-if (!canvas) throw new Error('no canvas');
-
-const W = 210, H = 270;
-canvas.style.width  = W + 'px';
-canvas.style.height = H + 'px';
-
-const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-renderer.setPixelRatio(devicePixelRatio);
-renderer.setSize(W, H);
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-
-const scene  = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(28, W / H, 0.1, 20);
-camera.position.set(0, 1.38, 1.9);
-
-const controls = new OrbitControls(camera, canvas);
-controls.target.set(0, 1.2, 0);
-controls.enablePan = false; controls.enableZoom = false;
-controls.minPolarAngle = Math.PI * 0.28; controls.maxPolarAngle = Math.PI * 0.68;
-controls.update();
-
-scene.add(new THREE.AmbientLight(0xffffff, 0.75));
-const key = new THREE.DirectionalLight(0xfff5e8, 1.0); key.position.set(1.5, 2.5, 2); scene.add(key);
-const fill = new THREE.DirectionalLight(0xe8f0ff, 0.45); fill.position.set(-1.5, 1, -1); scene.add(fill);
-
-let vrm = null;
-const clock = new THREE.Clock();
-let blinkT = 0, breathT = 0;
-window._vrmTalking = false; window._vrmTalkT = 0;
-
-const loader = new GLTFLoader();
-loader.register(p => new VRMLoaderPlugin(p));
-loader.load('./avatar.vrm',
-  gltf => {
-    vrm = gltf.userData.vrm;
-    VRMUtils.removeUnnecessaryVertices(gltf.scene);
-    VRMUtils.combineSkeletons(gltf.scene);
-    vrm.scene.rotation.y = Math.PI;
-    scene.add(vrm.scene);
-    if (loading) loading.style.display = 'none';
-    canvas.style.display = 'block';
-    animate();
-  },
-  xhr => { if (loading && xhr.total) loading.querySelector('span').textContent = `Lade… ${Math.round(xhr.loaded/xhr.total*100)}%`; },
-  () => { if (loading) { loading.querySelector('span').textContent = '⚠ avatar.vrm fehlt'; loading.querySelector('.vrm-spinner').style.display='none'; } }
-);
-
-function animate() {
-  requestAnimationFrame(animate);
-  const dt = clock.getDelta();
-  if (!vrm) return;
-  vrm.update(dt); controls.update();
-  breathT += dt;
-  const chest = vrm.humanoid?.getNormalizedBoneNode('chest');
-  if (chest) chest.rotation.x = Math.sin(breathT * 0.7) * 0.012;
-  blinkT += dt;
-  if (blinkT > 4 + Math.random() * 2) {
-    vrm.expressionManager?.setValue('blink', 1);
-    setTimeout(() => vrm.expressionManager?.setValue('blink', 0), 110);
-    blinkT = 0;
-  }
-  if (window._vrmTalking) {
-    window._vrmTalkT += dt;
-    vrm.expressionManager?.setValue('aa', ((Math.sin(window._vrmTalkT * 14) + 1) / 2) * 0.65);
-  } else {
-    const cur = vrm.expressionManager?.getValue('aa') ?? 0;
-    if (cur > 0.01) vrm.expressionManager?.setValue('aa', cur * 0.7);
-  }
-  const head = vrm.humanoid?.getNormalizedBoneNode('head');
-  if (head) { head.rotation.y = Math.sin(breathT * 0.4) * 0.04; head.rotation.z = Math.sin(breathT * 0.6) * 0.015; }
-  renderer.render(scene, camera);
-}
+<script>
+  window._vrmTalking = false;
+  window._vrmTalkT   = 0;
 </script>
 </body>
 </html>

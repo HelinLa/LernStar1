@@ -504,6 +504,14 @@ ul { list-style: none; }
 }
 
 /* VRM 3D Avatar */
+.avatar-img {
+  width: 210px;
+  height: 270px;
+  object-fit: contain;
+  object-position: center bottom;
+  display: block;
+  border-radius: 12px;
+}
 .vrm-wrap {
   position: relative;
   width: 210px;
