@@ -1836,6 +1836,65 @@ document.getElementById('chatForm')?.addEventListener('submit', e => {
   if (q) _chatAsk(q);
 });
 
+// ---- Spracheingabe ----
+(function () {
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const micBtn    = document.getElementById('chatMic');
+  if (!micBtn) return;
+
+  if (!SpeechRec) {
+    micBtn.title   = 'Spracheingabe wird von diesem Browser nicht unterstützt';
+    micBtn.style.opacity = '0.35';
+    micBtn.style.cursor  = 'not-allowed';
+    return;
+  }
+
+  const rec = new SpeechRec();
+  rec.lang             = 'de-DE';
+  rec.continuous       = false;
+  rec.interimResults   = true;
+  let _listening = false;
+
+  rec.onstart = () => {
+    _listening = true;
+    micBtn.classList.add('recording');
+    micBtn.title = 'Aufnahme läuft… (nochmal klicken zum Stoppen)';
+    document.getElementById('chatInput').placeholder = '🎤 Sprich jetzt…';
+  };
+
+  rec.onresult = e => {
+    const transcript = Array.from(e.results)
+      .map(r => r[0].transcript).join('');
+    document.getElementById('chatInput').value = transcript;
+    if (e.results[e.results.length - 1].isFinal) {
+      _listening = false;
+      micBtn.classList.remove('recording');
+      micBtn.title = 'Sprechen';
+      document.getElementById('chatInput').placeholder = 'Schreibe oder sprich deine Frage…';
+      const q = transcript.trim();
+      if (q) _chatAsk(q);
+    }
+  };
+
+  rec.onerror = () => {
+    _listening = false;
+    micBtn.classList.remove('recording');
+    document.getElementById('chatInput').placeholder = 'Schreibe oder sprich deine Frage…';
+  };
+
+  rec.onend = () => {
+    _listening = false;
+    micBtn.classList.remove('recording');
+    document.getElementById('chatInput').placeholder = 'Schreibe oder sprich deine Frage…';
+  };
+
+  micBtn.addEventListener('click', () => {
+    if (_listening) { rec.stop(); return; }
+    document.getElementById('chatInput').value = '';
+    try { rec.start(); } catch(e) {}
+  });
+})();
+
 document.getElementById('sidebarToggle').addEventListener('click', openSidebar);
 document.getElementById('sidebarClose').addEventListener('click', closeSidebar);
 document.getElementById('sidebarOverlay').addEventListener('click', closeSidebar);
