@@ -1713,7 +1713,7 @@ function closeSidebar() {
 // ============================================================
 // CHAT WIDGET  –  Herr Lala KI-Assistent
 // ============================================================
-const GEMINI_KEY = 'AIzaSyBUqz5QlaBNK4u9_YTH65Wvjn9yPrR3n-w';
+const GROQ_KEY = '';   // <-- hier deinen kostenlosen Groq API-Key eintragen
 
 const CHAT_SYSTEM = `Du bist Herr Lala, ein freundlicher und geduldiger Lernassistent auf der Schullernplattform LernStar. Du hilfst Schülerinnen und Schülern der Klassen 5–13 in Deutschland beim Verstehen von Schulstoffen. Antworte immer auf Deutsch. Erkläre in einfacher, kindgerechter Sprache mit kurzen Sätzen und konkreten Alltagsbeispielen. Halte deine Antworten kurz (maximal 4–5 Sätze). Bei Mathe- oder Physikaufgaben zeige den Lösungsweg klar Schritt für Schritt. Sei freundlich, ermutigend und positiv. Verwende gelegentlich passende Emojis.`;
 
@@ -1772,29 +1772,30 @@ async function _chatAsk(question) {
   sendBtn.disabled = true;
   _chatShowTyping();
 
-  if (!GEMINI_KEY) {
+  if (!GROQ_KEY) {
     _chatHideTyping();
-    _chatAddBubble(
-      '⚠️ Kein API-Key eingetragen. Bitte trage in <code>app.js</code> deinen Gemini-Key bei <code>GEMINI_KEY</code> ein.',
-      'error'
-    );
+    _chatAddBubble('⚠️ Kein API-Key eingetragen. Bitte trage deinen Groq-Key bei GROQ_KEY ein.', 'error');
     sendBtn.disabled = false;
     return;
   }
 
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: CHAT_SYSTEM }] },
-          contents: [{ role: 'user', parts: [{ text: question }] }],
-          generationConfig: { maxOutputTokens: 400, temperature: 0.7 },
-        }),
-      }
-    );
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${GROQ_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        messages: [
+          { role: 'system', content: CHAT_SYSTEM },
+          { role: 'user',   content: question },
+        ],
+        max_tokens: 400,
+        temperature: 0.7,
+      }),
+    });
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -1802,7 +1803,7 @@ async function _chatAsk(question) {
     }
 
     const data   = await res.json();
-    const answer = data.candidates?.[0]?.content?.parts?.[0]?.text || '(Keine Antwort erhalten)';
+    const answer = data.choices?.[0]?.message?.content || '(Keine Antwort erhalten)';
 
     _chatHideTyping();
     _chatAddBubble(answer, 'bot');
