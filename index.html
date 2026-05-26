@@ -17,9 +17,52 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=11" />
+  <!-- Markdown + Mathe-Rendering für Chat -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="window._katexReady=true"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
 </head>
 <body>
+
+<!-- ===== ONBOARDING ===== -->
+<div id="onboardingOverlay" class="onboarding-overlay hidden">
+  <div class="onboarding-card">
+    <div class="ob-step" id="obStep1">
+      <div class="ob-icon">🌟</div>
+      <h2 class="ob-title">Willkommen bei <span class="accent">LernStar KI</span>!</h2>
+      <p class="ob-desc">Ich bin Herr Lala, dein persönlicher KI-Tutor. Wie heißt du?</p>
+      <input type="text" id="obNameInput" class="ob-input" placeholder="Dein Name…" maxlength="30"
+        autocomplete="given-name" onkeydown="if(event.key==='Enter')obSetName()">
+      <button class="btn-primary ob-btn" onclick="obSetName()">Weiter →</button>
+      <button class="ob-skip" onclick="obSetGoal('normal')">Überspringen</button>
+    </div>
+    <div class="ob-step hidden" id="obStep2">
+      <div class="ob-icon">🎯</div>
+      <h2 class="ob-title">Hallo <span id="obGreetName"></span>!</h2>
+      <p class="ob-desc">Was ist dein Lernziel?</p>
+      <div class="ob-goals">
+        <button class="ob-goal-btn" onclick="obSetGoal('normal')">
+          <span class="ob-goal-icon">📚</span>
+          <span class="ob-goal-title">Allgemeines Lernen</span>
+          <span class="ob-goal-desc">Themen verstehen &amp; üben</span>
+        </button>
+        <button class="ob-goal-btn" onclick="obSetGoal('zap')">
+          <span class="ob-goal-icon">🎯</span>
+          <span class="ob-goal-title">ZAP-Vorbereitung</span>
+          <span class="ob-goal-desc">Zentrale Abschlussprüfung</span>
+        </button>
+        <button class="ob-goal-btn" onclick="obSetGoal('abitur')">
+          <span class="ob-goal-icon">🏆</span>
+          <span class="ob-goal-title">Abitur-Vorbereitung</span>
+          <span class="ob-goal-desc">Schriftliches Abitur</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- ===== TOP NAV ===== -->
 <header class="topnav">
@@ -32,6 +75,10 @@
       <span class="logo-text">LernStar</span>
     </a>
     <button class="home-btn" onclick="navigate('home')">🏠 Startseite</button>
+    <div class="topnav-ki-row">
+      <span class="ki-user-badge" id="userNameBadge" style="display:none"></span>
+      <span class="ki-goal-badge" id="goalBadge" style="display:none"></span>
+    </div>
   </div>
 </header>
 
@@ -49,6 +96,15 @@
     <div class="sidebar-section" id="subjectNavSection" style="display:none">
       <p class="sidebar-label">Fächer</p>
       <ul id="subjectNavList"></ul>
+    </div>
+    <div class="sidebar-section">
+      <p class="sidebar-label">KI-Features</p>
+      <ul>
+        <li><button class="sidebar-ki-btn" onclick="navigate('examprep');closeSidebar()">🎯 Prüfungsmodus</button></li>
+        <li><button class="sidebar-ki-btn" onclick="navigate('analyse');closeSidebar()">📊 Lernanalyse</button></li>
+        <li><button class="sidebar-ki-btn" onclick="resetOnboarding()">⚙️ Profil &amp; Ziel ändern</button></li>
+        <li><button class="sidebar-ki-btn" onclick="openAISettings();closeSidebar()">🔌 KI-Anbieter</button></li>
+      </ul>
     </div>
   </nav>
   <div class="sidebar-footer">
@@ -276,6 +332,12 @@
       <div class="topics-list" id="topicsList"></div>
     </div>
 
+    <!-- Experiments Section -->
+    <div class="experiments-section" id="experimentsSection" style="display:none">
+      <h2 class="section-heading">🧪 Experimente</h2>
+      <div class="experiments-list" id="experimentsList"></div>
+    </div>
+
     <!-- Exercises Section -->
     <div class="exercises-section" id="exercisesSection">
       <h2 class="section-heading">✏️ Aufgaben & Übungen</h2>
@@ -285,6 +347,12 @@
         <button class="filter-btn" data-diff="2">⭐⭐ Mittel</button>
         <button class="filter-btn" data-diff="3">⭐⭐⭐ Schwer</button>
       </div>
+      <!-- KI-Aufgabe -->
+      <div class="ai-exercise-bar">
+        <button class="btn-ai-exercise" id="aiExerciseBtn" onclick="generateAIExercise()">🔄 Neue KI-Aufgabe</button>
+        <span class="ai-ex-bar-hint">Wird automatisch beim Thema erstellt</span>
+      </div>
+      <div class="ai-exercise-box hidden" id="aiExerciseBox"></div>
       <div class="exercises-list" id="exercisesList"></div>
     </div>
   </section>
@@ -348,6 +416,63 @@
     </div>
   </section>
 
+
+  <!-- EXAM PREP VIEW -->
+  <section class="view hidden" id="viewExamPrep">
+    <div class="exam-prep-container">
+      <div class="exam-prep-hero">
+        <div class="hero-breadcrumb" onclick="navigate('home')" style="cursor:pointer">← Startseite</div>
+        <h1 id="examPrepTitle">🎯 Prüfungsvorbereitung</h1>
+        <p id="examPrepSub">KI-generierte Aufgaben · Typische Prüfungsformate</p>
+      </div>
+      <div class="exam-mode-tabs">
+        <button class="exam-tab active" id="tabZAP" onclick="setExamMode('zap')">🎯 ZAP</button>
+        <button class="exam-tab" id="tabAbi" onclick="setExamMode('abitur')">🏆 Abitur</button>
+      </div>
+      <div class="exam-setup" id="examSetup">
+        <div class="exam-setup-row">
+          <label class="exam-setup-label">Fach wählen</label>
+          <div class="exam-subject-btns" id="examSubjectBtns"></div>
+        </div>
+        <div class="exam-setup-row">
+          <label class="exam-setup-label">Schwierigkeitsgrad</label>
+          <div class="exam-diff-btns">
+            <button class="exam-diff-btn" data-diff="1" onclick="setExamDiff(1)">⭐ Einfach</button>
+            <button class="exam-diff-btn active" data-diff="2" onclick="setExamDiff(2)">⭐⭐ Mittel</button>
+            <button class="exam-diff-btn" data-diff="3" onclick="setExamDiff(3)">⭐⭐⭐ Schwer</button>
+          </div>
+        </div>
+        <button class="btn-primary exam-start-btn" onclick="startExamSession()">🚀 Prüfungssitzung starten</button>
+      </div>
+      <div class="exam-session hidden" id="examSession">
+        <div class="exam-progress-wrap">
+          <div class="exam-progress-bar"><div class="exam-progress-fill" id="examProgressFill" style="width:0%"></div></div>
+          <span class="exam-q-counter" id="examQCounter">Frage 1 / 5</span>
+        </div>
+        <div class="exam-question-card" id="examQuestionCard"></div>
+      </div>
+      <div class="exam-results hidden" id="examResults"></div>
+    </div>
+  </section>
+
+  <!-- ANALYSIS VIEW -->
+  <section class="view hidden" id="viewAnalyse">
+    <div class="analyse-container">
+      <div class="hero-breadcrumb" onclick="navigate('home')" style="cursor:pointer">← Startseite</div>
+      <h1 class="analyse-title">📊 Meine Lernanalyse</h1>
+      <div id="analyseUserInfo" class="analyse-user-info"></div>
+      <div class="analyse-grid" id="analyseGrid"></div>
+      <div class="analyse-ai-card" id="analyseAiCard">
+        <div class="analyse-ai-header">
+          <span class="analyse-ai-avatar">🎓</span>
+          <strong>Herr Lala sagt:</strong>
+        </div>
+        <div id="analyseAiText" class="analyse-ai-text">Lernanalyse wird geladen…</div>
+      </div>
+      <div id="analyseWeaknesses"></div>
+    </div>
+  </section>
+
 </main>
 
 <!-- ===== CHAT WIDGET ===== -->
@@ -406,8 +531,73 @@
 </div>
 <div class="chat-overlay" id="chatOverlay"></div>
 
-<script src="content.js?v=4"></script>
-<script src="app.js?v=4"></script>
+<!-- ===== KI-ANBIETER SETTINGS MODAL ===== -->
+<div class="ai-settings-overlay hidden" id="aiSettingsModal">
+  <div class="ai-settings-card">
+    <div class="ai-settings-header">
+      <h2>🔌 KI-Anbieter</h2>
+      <button class="ai-settings-close" onclick="closeAISettings()">✕</button>
+    </div>
+    <p class="ai-settings-desc">LernStar probiert alle aktiven Anbieter der Reihe nach aus. Fällt einer aus, wechselt er automatisch zum nächsten.</p>
+
+    <!-- Aktive Anbieter -->
+    <h3 class="ai-settings-section-title">Aktive Anbieter</h3>
+    <div id="aiProviderList" class="ai-provider-list"></div>
+
+    <!-- Ollama (lokal) -->
+    <h3 class="ai-settings-section-title">➕ Ollama hinzufügen (lokal)</h3>
+    <div class="ai-settings-form">
+      <input type="text" id="ollamaUrl" class="ai-settings-input" placeholder="URL (Standard: http://localhost:11434/v1/chat/completions)">
+      <input type="text" id="ollamaModel" class="ai-settings-input" placeholder="Modell (z.B. llama3, mistral)">
+      <button class="btn-ai-add" onclick="saveOllamaProvider()">Ollama hinzufügen</button>
+    </div>
+
+    <!-- Eigene API -->
+    <h3 class="ai-settings-section-title">➕ Eigene OpenAI-kompatible API</h3>
+    <div class="ai-settings-form">
+      <input type="text"     id="customName"  class="ai-settings-input" placeholder="Name (z.B. Mein Server)">
+      <input type="url"      id="customUrl"   class="ai-settings-input" placeholder="URL (https://…/v1/chat/completions)">
+      <input type="password" id="customKey"   class="ai-settings-input" placeholder="API-Key">
+      <input type="text"     id="customModel" class="ai-settings-input" placeholder="Modell (z.B. gpt-4o-mini)">
+      <div class="ai-settings-btn-row">
+        <button class="btn-ai-test" id="testProviderBtn" onclick="testCustomProvider()">Verbindung testen</button>
+        <button class="btn-ai-add"  onclick="saveCustomProvider()">Hinzufügen</button>
+      </div>
+      <p class="ai-test-result" id="testProviderResult"></p>
+    </div>
+
+    <div class="ai-settings-footer">
+      <button class="btn-primary" onclick="closeAISettings()">Fertig</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== ERKLÄRVIDEO PLAYER OVERLAY ===== -->
+<div id="erklaerVideoOverlay" class="ev-overlay hidden" onclick="_evBgClick(event)">
+  <div class="ev-player">
+    <!-- Top bar -->
+    <div class="ev-topbar">
+      <div class="ev-progress-track">
+        <div class="ev-progress-fill" id="evProgressFill"></div>
+      </div>
+      <button class="ev-close-btn" onclick="closeErklaerVideo()">✕</button>
+    </div>
+
+    <!-- Scene stage -->
+    <div class="ev-stage" id="evStage"></div>
+
+    <!-- Bottom controls -->
+    <div class="ev-controls">
+      <button class="ev-ctrl-btn" id="evPlayPauseBtn" onclick="_evTogglePause()">⏸</button>
+      <div class="ev-scene-dots" id="evSceneDots"></div>
+      <button class="ev-ctrl-btn" onclick="_evSkipScene()">⏭</button>
+    </div>
+  </div>
+</div>
+
+<script src="content.js?v=12"></script>
+<script src="js/ai_engine.js?v=1"></script>
+<script src="app.js?v=26"></script>
 <script>
   // Service Worker deregistrieren damit kein alter Cache Probleme macht
   if ('serviceWorker' in navigator) {
