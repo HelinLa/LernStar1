@@ -1741,3 +1741,111 @@ ul { list-style: none; }
   from { opacity:0; transform: translateY(10px); }
   to   { opacity:1; transform: translateY(0); }
 }
+
+/* ============================================================
+   PRÜFUNGSMODUS (ZAP / Abitur)
+   ============================================================ */
+.exam-prep-container { max-width:720px; margin:0 auto; padding:0 20px 60px; }
+.exam-prep-hero { text-align:center; padding:40px 0 28px; }
+.exam-prep-hero h1 { font-size:2rem; font-weight:900; margin-bottom:8px; }
+.exam-prep-hero p { color:var(--text-muted); font-size:.95rem; }
+
+.exam-mode-tabs { display:flex; gap:10px; justify-content:center; margin-bottom:24px; }
+.exam-tab {
+  padding:10px 26px; border-radius:30px; border:2px solid var(--border);
+  font-weight:700; font-size:.9rem; cursor:pointer; transition:all .15s;
+}
+.exam-tab.active { background:var(--gc,#7C3AED); color:#fff; border-color:var(--gc,#7C3AED); }
+
+.exam-setup { background:var(--surface); border-radius:var(--radius); padding:24px; box-shadow:var(--shadow); margin-bottom:20px; }
+.exam-setup-row { margin-bottom:18px; }
+.exam-setup-label { display:block; font-weight:700; font-size:.85rem; margin-bottom:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.06em; }
+.exam-subject-btns { display:flex; flex-wrap:wrap; gap:8px; }
+.exam-subject-btn {
+  padding:8px 18px; border-radius:20px; border:2px solid var(--border);
+  font-weight:700; font-size:.88rem; cursor:pointer; transition:all .15s;
+}
+.exam-subject-btn.active { background:var(--gc,#7C3AED); color:#fff; border-color:var(--gc,#7C3AED); }
+
+.exam-diff-btns { display:flex; gap:8px; }
+.exam-diff-btn {
+  padding:8px 18px; border-radius:20px; border:2px solid var(--border);
+  font-weight:700; font-size:.88rem; cursor:pointer; transition:all .15s;
+}
+.exam-diff-btn.active { background:var(--gc,#7C3AED); color:#fff; border-color:var(--gc,#7C3AED); }
+
+/* ─── Fragen-Card ─── */
+.exam-session { display:flex; flex-direction:column; gap:16px; }
+.exam-progress-bar { height:6px; background:var(--border); border-radius:6px; overflow:hidden; }
+.exam-progress-fill { height:100%; background:linear-gradient(90deg,var(--gc,#7C3AED),var(--gc2,#A855F7)); border-radius:6px; transition:width .4s; }
+.exam-q-counter { font-size:.82rem; font-weight:700; color:var(--text-muted); white-space:nowrap; }
+
+.exam-question-card { background:var(--surface); border-radius:var(--radius); padding:28px; box-shadow:var(--shadow); }
+
+/* Frage-Text */
+.exam-q-text { font-size:1.08rem; font-weight:700; line-height:1.6; margin-bottom:22px; color:var(--text); }
+
+/* Antwort-Buttons – JEDER in einer eigenen Zeile */
+.exam-q-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.exam-q-opt {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  border: 2px solid var(--border);
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  font-size: .97rem;
+  font-weight: 600;
+  transition: border-color .13s, background .13s;
+  width: 100%;
+}
+.exam-q-opt:hover:not(:disabled) { border-color:var(--gc,#7C3AED); background:var(--gl,#EDE9FE); }
+.exam-q-opt:disabled { cursor:default; opacity:.75; }
+
+/* Buchstabe A B C D */
+.exam-opt-letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--gl,#EDE9FE);
+  color: var(--gc,#7C3AED);
+  font-weight: 900;
+  font-size: .92rem;
+  flex-shrink: 0;
+}
+
+.exam-correct { border-color:#059669 !important; background:#ECFDF5 !important; }
+.exam-correct .exam-opt-letter { background:#059669; color:#fff; }
+.exam-wrong   { border-color:#DC2626 !important; background:#FEF2F2 !important; }
+.exam-wrong .exam-opt-letter   { background:#DC2626; color:#fff; }
+
+.exam-q-fb { margin-top:16px; padding:14px 16px; border-radius:10px; font-size:.92rem; line-height:1.5; font-weight:600; }
+.exam-fb-ok  { background:#ECFDF5; color:#065F46; border:1px solid #6EE7B7; }
+.exam-fb-err { background:#FEF2F2; color:#991B1B; border:1px solid #FCA5A5; }
+
+/* Ergebnisse */
+.exam-results { background:var(--surface); border-radius:var(--radius); padding:28px; box-shadow:var(--shadow); }
+.exam-res-score { font-size:3rem; font-weight:900; text-align:center; margin-bottom:6px; }
+.exam-res-sub { text-align:center; color:var(--text-muted); margin-bottom:20px; }
+.exam-res-items { display:flex; flex-direction:column; gap:12px; margin-bottom:20px; }
+.exam-res-item { padding:14px 16px; border-radius:10px; background:var(--bg); border:1px solid var(--border); font-size:.9rem; line-height:1.5; }
+.exam-res-actions { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+
+.ai-ex-error { color:#DC2626; font-weight:600; line-height:1.6; }
+
+/* ─── Groq Key Input im Chat ─── */
+#groqKeyInput { width:100%; padding:10px 12px; border-radius:10px; border:2px solid var(--border); font-size:.95rem; margin-top:8px; font-family:inherit; }
+#groqKeyInput:focus { outline:none; border-color:var(--gc,#7C3AED); }
+
