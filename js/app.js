@@ -1,7 +1,6 @@
 ﻿/* ============================================================
-   LernStar â€“ App Logic  v26
+   LernStar â€“ App Logic
    ============================================================ */
-console.log('%c LernStar v26 geladen âœ“', 'background:#7C3AED;color:white;padding:4px 10px;border-radius:4px');
 
 // ---- State ----
 const state = {
@@ -13,6 +12,16 @@ const state = {
   progress: JSON.parse(localStorage.getItem('ls_progress') || '{}'),
   introTimer: null,
   introInterval: null,
+  // KI-Personalisierung
+  userName: localStorage.getItem('ls_userName') || null,
+  learningGoal: localStorage.getItem('ls_learningGoal') || 'normal', // 'normal','zap','abitur'
+  onboardingDone: localStorage.getItem('ls_onboardingDone') === '1',
+  currentTopicName: null,
+  // PrÃ¼fungsmodus
+  examMode: 'zap',
+  examDiff: 2,
+  examSubjectId: null,
+  examSession: { questions: [], current: 0, score: 0, answers: [] },
 };
 
 // ============================================================
@@ -63,14 +72,14 @@ if (typeof speechSynthesis !== 'undefined') {
   speechSynthesis.addEventListener('voiceschanged', () => {
     _cachedVoice = _pickMaleVoice();
     const badge = document.getElementById('voiceBadge');
-    if (badge) badge.textContent = ELEVEN_KEY ? 'âœ¨ ElevenLabs: Liam' : _voiceLabel(_cachedVoice);
+    if (badge) badge.textContent = ELEVEN_KEY ? 'âœ¨ ElevenLabs: Thomas' : _voiceLabel(_cachedVoice);
   });
   if (speechSynthesis.getVoices().length) _cachedVoice = _pickMaleVoice();
 }
 // Badge sofort setzen falls ElevenLabs aktiv
 document.addEventListener('DOMContentLoaded', () => {
   const badge = document.getElementById('voiceBadge');
-  if (badge && ELEVEN_KEY) badge.textContent = 'âœ¨ ElevenLabs: Liam';
+  if (badge && ELEVEN_KEY) badge.textContent = 'âœ¨ ElevenLabs: Thomas';
 });
 
 // â”€â”€ VRM LIP SYNC â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -78,12 +87,107 @@ function _startLipSync() { window._vrmTalking = true;  window._vrmTalkT = 0; }
 function _stopLipSync()  { window._vrmTalking = false; }
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+
 // â”€â”€ ELEVENLABS TTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const ELEVEN_KEY      = 'e24b6be67594419d8f50afdfb195995a';
-const ELEVEN_VOICE    = 'TX3LPaxmHKxFdv7VOQHJ'; // Liam â€“ natÃ¼rlich, klar, modern
+const ELEVEN_VOICE    = 'Fghah4fztZORbiKfIGAs'; // Thomas â€“ Deutsch, ErzÃ¤hlung
 const ELEVEN_MODEL    = 'eleven_multilingual_v2';
 const _audioCache     = new Map();
 let   _currentAudio   = null;
+
+function _fracSpoken(z, n) {
+  const LOOKUP = {
+    '1/2':'einhalb',      '2/2':'ein Ganzes',
+    '1/3':'eindrittel',   '2/3':'zweidrittel',   '3/3':'ein Ganzes',
+    '1/4':'einviertel',   '2/4':'zweiviertel',   '3/4':'dreiviertel',   '4/4':'ein Ganzes',
+    '1/5':'einfÃ¼nftel',   '2/5':'zweifÃ¼nftel',   '3/5':'dreifÃ¼nftel',   '4/5':'vierfÃ¼nftel',
+    '1/6':'einsechstel',  '2/6':'zweisechstel',  '3/6':'dreisechstel',  '4/6':'viersechstel',  '5/6':'fÃ¼nfsechstel',
+    '1/7':'einsiebtel',   '2/7':'zweisiebtel',   '3/7':'dreisiebtel',
+    '1/8':'einachtel',    '2/8':'zweiachtel',    '3/8':'dreiachtel',    '4/8':'vierachteln',
+                          '5/8':'fÃ¼nfachtel',    '6/8':'sechsachtel',   '7/8':'siebenachtel',
+    '1/9':'einneuntel',   '2/9':'zweineuntel',
+    '1/10':'einzehntel',  '2/10':'zweizehntel',  '3/10':'dreizehntel',
+    '1/12':'einzwÃ¶lftel', '5/12':'fÃ¼nfzwÃ¶lftel',
+    '1/100':'ein Hundertstel', '1/1000':'ein Tausendstel',
+  };
+  const key = `${z}/${n}`;
+  if (LOOKUP[key]) return LOOKUP[key];
+  // Fallback: ZÃ¤hler ausschreiben + Nenner-Endung
+  const NUMS = ['null','ein','zwei','drei','vier','fÃ¼nf','sechs','sieben',
+                'acht','neun','zehn','elf','zwÃ¶lf','dreizehn','vierzehn','fÃ¼nfzehn'];
+  const DENS = {2:'halb',3:'drittel',4:'viertel',5:'fÃ¼nftel',6:'sechstel',
+                7:'siebtel',8:'achtel',9:'neuntel',10:'zehntel',12:'zwÃ¶lftel'};
+  const zi = parseInt(z), ni = parseInt(n);
+  if (isNaN(zi) || isNaN(ni) || ni === 0) return `${z} durch ${n}`;
+  const zStr = (zi >= 0 && zi < NUMS.length) ? NUMS[zi] : z;
+  const nStr = DENS[ni] || `${n}-tel`;
+  return `${zStr}${nStr}`;
+}
+
+function _mathToSpoken(t) {
+  // 0. Physikalische Einheiten (vor Bruch-Erkennung!)
+  t = t.replace(/\bm\/sÂ²/g,  'Meter pro Sekunde Quadrat');
+  t = t.replace(/\bm\/s\b/g, 'Meter pro Sekunde');
+  t = t.replace(/\bkm\/h\b/g,'Kilometer pro Stunde');
+  t = t.replace(/\bN\/m\b/g, 'Newton pro Meter');
+  t = t.replace(/\bJ\/kg\b/g,'Joule pro Kilogramm');
+  t = t.replace(/\bW\/m\b/g, 'Watt pro Meter');
+  t = t.replace(/\bm\/s\b/g, 'Meter pro Sekunde');
+  // Griechische Buchstaben
+  t = t.replace(/\bÎ±\b/g,'Alpha'); t = t.replace(/\bÎ²\b/g,'Beta');
+  t = t.replace(/\bÎ³\b/g,'Gamma'); t = t.replace(/\bÎ´\b/g,'Delta');
+  t = t.replace(/\bÎ»\b/g,'Lambda'); t = t.replace(/\bÎ¼\b/g,'My');
+  t = t.replace(/\bÏ€\b/g,'Pi'); t = t.replace(/\bÏƒ\b/g,'Sigma');
+  t = t.replace(/\bÏ‰\b/g,'Omega'); t = t.replace(/\bÎ©\b/g,'Ohm');
+  t = t.replace(/\bÏ\b/g,'Rho'); t = t.replace(/\bÎ”\b/g,'Delta');
+  // Physik-Symbole
+  t = t.replace(/\bFG\b/g,'Gewichtskraft'); t = t.replace(/\bFR\b/g,'Reibungskraft');
+  t = t.replace(/\bF_G\b/g,'Gewichtskraft'); t = t.replace(/\bF_R\b/g,'Reibungskraft');
+  // 1. LaTeX-BrÃ¼che: \frac{a}{b}
+  t = t.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, (_, z, n) => _fracSpoken(z, n));
+  // 2. BrÃ¼che im Text: 1/4, 2/4, 3/8 usw. (ALLE digit/slash/digit)
+  t = t.replace(/(\d+)\/(\d+)/g, (_, z, n) => _fracSpoken(z, n));
+  // 3. $-Dollarzeichen entfernen
+  t = t.replace(/\$\$?([^$\n]+)\$\$?/g, '$1');
+  // 4. Potenzen
+  t = t.replace(/\^(\d+)/g, (_, e) => ` hoch ${e}`);
+  t = t.replace(/Â²/g, ' Quadrat');
+  t = t.replace(/Â³/g, ' Kubik');
+  // 5. Wurzel
+  t = t.replace(/\\sqrt\{([^}]+)\}/g, (_, x) => `Wurzel aus ${x}`);
+  // 6. Operatoren zwischen Zahlen â€“ kein Lookbehind (Safari-kompatibel!)
+  //    (\d) nimmt letzte Ziffer vor Operator mit und gibt sie per $1 zurÃ¼ck
+  //    (?=\d) schaut auf erste Ziffer nach Operator ohne sie zu verbrauchen
+  t = t.replace(/(\d)\s*\+\s*(?=\d)/g,         '$1 plus ');
+  t = t.replace(/(\d)\s*[âˆ’â€“]\s*(?=\d)/g,       '$1 minus ');  // Unicode-Minus & En-Dash
+  t = t.replace(/(\d)\s*-\s*(?=\d)/g,           '$1 minus ');  // normaler Bindestrich
+  t = t.replace(/(\d)\s*Ã—\s*(?=\d)/g,           '$1 mal ');
+  t = t.replace(/(\d)\s*Â·\s*(?=\d)/g,           '$1 mal ');
+  t = t.replace(/(\d)\s*Ã·\s*(?=\d)/g,           '$1 geteilt durch ');
+  t = t.replace(/(\d)\s*=\s*(?=\d)/g,           '$1 ist gleich ');
+  t = t.replace(/(\d)\s*â‰¤\s*(?=\d)/g,           '$1 kleiner gleich ');
+  t = t.replace(/(\d)\s*â‰¥\s*(?=\d)/g,           '$1 grÃ¶ÃŸer gleich ');
+  t = t.replace(/(\d)\s*<\s*(?=\d)/g,           '$1 kleiner als ');
+  t = t.replace(/(\d)\s*>\s*(?=\d)/g,           '$1 grÃ¶ÃŸer als ');
+  // 7. Freistehende Sonderzeichen
+  t = t.replace(/Ã—/g, ' mal ');
+  t = t.replace(/Ã·/g, ' geteilt durch ');
+  t = t.replace(/\\cdot/g, ' mal ');
+  t = t.replace(/\\times/g, ' mal ');
+  t = t.replace(/\\div/g, ' geteilt durch ');
+  // 8. Restliche LaTeX-Befehle
+  t = t.replace(/\\[a-zA-Z]+\{([^}]*)\}/g, '$1');
+  t = t.replace(/\\[a-zA-Z]+/g, '');
+  // 9. Markdown bereinigen
+  t = t.replace(/#{1,6}\s*/g, '');
+  t = t.replace(/\*\*(.+?)\*\*/g, '$1');
+  t = t.replace(/\*(.+?)\*/g, '$1');
+  t = t.replace(/`[^`]+`/g, '');
+  t = t.replace(/^[\-*]\s+/gm, '');
+  t = t.replace(/\n{2,}/g, '. ').replace(/\n/g, ' ');
+  t = t.replace(/\s{2,}/g, ' ').trim();
+  return t;
+}
 
 async function _elevenFetch(text) {
   const key = text.slice(0, 140);
@@ -918,11 +1022,13 @@ function navigate(view, gradeId, subjectId, exerciseId) {
   updateGlobalProgress();
 
   switch (view) {
-    case 'home':    renderHome();    break;
-    case 'grade':   renderGrade();   break;
-    case 'subject': renderSubject(); break;
-    case 'quiz':    renderQuiz();    break;
-    case 'result':  showView('viewResult'); break;
+    case 'home':     renderHome();     break;
+    case 'grade':    renderGrade();    break;
+    case 'subject':  renderSubject();  break;
+    case 'quiz':     renderQuiz();     break;
+    case 'result':   showView('viewResult'); break;
+    case 'examprep': renderExamPrep(); break;
+    case 'analyse':  renderAnalyse();  break;
   }
 
   // Scroll to top
@@ -990,7 +1096,7 @@ function renderGrade() {
       <div class="subject-icon">${sub.icon}</div>
       <div class="subject-name">${sub.name}</div>
       <div class="subject-desc">${sub.desc}</div>
-      <div class="subject-topics">${sub.topics.length} Themen Â· ${sub.exercises.length} Ãœbungseinheiten</div>
+      <div class="subject-topics">${sub.topics.filter(t=>!t.isChapter).length} Themen Â· ${sub.exercises.length} Ãœbungseinheiten</div>
       ${done > 0 ? `<div style="font-size:.78rem;color:#10B981;font-weight:700;margin-top:6px">âœ… ${done}% geschafft</div>` : ''}
       <div class="subject-arrow">â†’</div>`;
     grid.appendChild(card);
@@ -1034,21 +1140,58 @@ function renderSubject() {
     document.getElementById('stopIntroBtn').classList.add('hidden');
   }
 
+  // GesprÃ¤chsverlauf beim Fachwechsel zurÃ¼cksetzen
+  _chatHistory = [];
+
   // Topics (mit Play-Button fÃ¼r Mathe/Physik)
   const topicsList = document.getElementById('topicsList');
   topicsList.innerHTML = '';
+  let topicNum = 0;
   subject.topics.forEach((t, i) => {
+    if (t.isChapter) {
+      const hdr = document.createElement('div');
+      hdr.className = 'topic-chapter-header';
+      hdr.id = `topic-item-${i}`;
+      hdr.textContent = t.name;
+      topicsList.appendChild(hdr);
+      return;
+    }
+    topicNum++;
     const item = document.createElement('div');
     item.className = 'topic-item';
     item.id = `topic-item-${i}`;
     item.innerHTML = `
-      <div class="topic-num">${i + 1}</div>
+      <div class="topic-num">${topicNum}</div>
       <div class="topic-name">${t.name}</div>
       <div class="topic-diff">${DIFF_STARS[t.diff]}</div>
       ${hasVideo ? `<button class="topic-play-btn" id="topicBtn${i}" onclick="playTopic(${i})">ðŸ”Š ErklÃ¤ren</button>` : ''}
       ${EV_SCENES[t.name] ? `<button class="ev-topic-btn" onclick="openErklaerVideo('${t.name.replace(/'/g,"\\'")}')">ðŸŽ¬ ErklÃ¤rvideo</button>` : ''}`;
     topicsList.appendChild(item);
   });
+
+  // Experiments section
+  const expSection = document.getElementById('experimentsSection');
+  const expList = document.getElementById('experimentsList');
+  const expTopics = subject.topics.filter(t => !t.isChapter && t.exp);
+  expList.innerHTML = '';
+  if (expTopics.length > 0) {
+    expSection.style.display = '';
+    expTopics.forEach(t => {
+      const card = document.createElement('div');
+      card.className = 'experiment-card';
+      card.innerHTML = `
+        <div class="experiment-card-icon">ðŸ§ª</div>
+        <div class="experiment-card-body">
+          <div class="experiment-card-theme">Thema</div>
+          <div class="experiment-card-title">${t.name}</div>
+          <div class="experiment-card-desc">Interaktive Simulation â€“ spiele mit den Parametern und beobachte, was passiert!</div>
+        </div>
+        <button class="experiment-card-btn" onclick="openExperiment('${t.exp}')">â–¶ Simulation<br>starten</button>`;
+      expList.appendChild(card);
+    });
+  } else {
+    expSection.style.display = 'none';
+  }
 
   // Exercises
   renderExercises(subject, 'all');
@@ -1121,6 +1264,7 @@ function playAllTopics(subject) {
       return;
     }
     const topic = subject.topics[idx];
+    if (topic.isChapter) { idx++; playNext(); return; }
     _clearTopicHighlights();
     const li = document.getElementById(`topic-item-${idx}`);
     if (li) li.classList.add('topic-active');
@@ -1129,7 +1273,7 @@ function playAllTopics(subject) {
     showTopicVisual(topic);
     const speech = document.getElementById('avatarSpeech');
     if (speech) speech.textContent = topic.explanation.substring(0, 90) + 'â€¦';
-    _speakSequential(`Thema ${idx + 1}: ${topic.name}. ${topic.explanation}`, () => {
+    _speakSequential(`${topic.name}. ${topic.explanation}`, () => {
       idx++;
       playNext();
     });
@@ -1147,6 +1291,12 @@ function playTopic(idx) {
 
   stopIntro();
   _clearTopicHighlights();
+  state.currentTopicName = topic.name;
+
+  // KI-Aufgabe automatisch neu generieren
+  const _aiBox = document.getElementById('aiExerciseBox');
+  if (_aiBox) { _aiBox.classList.add('hidden'); _aiBox.innerHTML = ''; }
+  generateAIExercise();
 
   // Highlight aktives Topic
   const activeItem = document.getElementById(`topic-item-${idx}`);
@@ -1184,6 +1334,7 @@ function hideTopicVisual() {
 
 // Lightweight TTS for sequential playback (does not manage play/pause buttons)
 function _speakSequential(text, onDone, _skipEleven) {
+  text = _mathToSpoken(text);
   if (ELEVEN_KEY && !_skipEleven) { _elevenSpeakSequential(text, onDone); return; }
   if (!('speechSynthesis' in window)) { if (onDone) setTimeout(onDone, 600); return; }
   const voice = _getVoice();
@@ -1228,6 +1379,7 @@ function _speakSequential(text, onDone, _skipEleven) {
 
 // Kern-Sprech-Funktion (Hedda fest)
 function _speakText(text, topicIdx, onDone, _skipEleven) {
+  text = _mathToSpoken(text);
   if (ELEVEN_KEY && !_skipEleven) { _elevenSpeakText(text, onDone); return; }
   const btn      = document.getElementById('playIntroBtn');
   const pauseBtn = document.getElementById('pauseIntroBtn');
@@ -1713,35 +1865,161 @@ function closeSidebar() {
 }
 
 // ============================================================
-// CHAT WIDGET  â€“  Herr Lala KI-Assistent
+// KI-PROVIDER ABSTRACTION â€“ unabhÃ¤ngig von einem einzigen Anbieter
 // ============================================================
-// Groq-Key wird im Browser gespeichert (nicht im Code!)
 function getGroqKey() { return localStorage.getItem('ls_groq_key') || ''; }
-function setGroqKey(k) { localStorage.setItem('ls_groq_key', k.trim()); }
+const GROQ_KEY = getGroqKey();
 
-// Zeigt Key-Eingabe direkt im Chat an
-function _showKeyInput(msg) {
-  const msgs = document.getElementById('chatMessages');
-  const div = document.createElement('div');
-  div.className = 'chat-bubble chat-bubble-error';
-  div.innerHTML = (msg || '🔑 Groq API-Key benötigt.') + `<br><br>
-    <input id="groqKeyInput" type="password" placeholder="gsk_..." 
-      style="width:100%;padding:8px;border-radius:8px;border:1px solid #ccc;margin-top:4px;font-size:14px">
-    <button onclick="
-      var k=document.getElementById('groqKeyInput').value.trim();
-      if(k){setGroqKey(k);this.closest('.chat-bubble').remove();
-      document.getElementById('chatMessages').insertAdjacentHTML('beforeend',
-        '<div class=\\'chat-bubble chat-bubble-bot\\'>✅ Key gespeichert! Jetzt nochmal senden.</div>');}
-    " style="margin-top:8px;padding:8px 16px;background:#7c3aed;color:#fff;border:none;border-radius:8px;cursor:pointer;width:100%">
-      💾 Key speichern
-    </button>`;
-  msgs.appendChild(div);
-  msgs.scrollTop = msgs.scrollHeight;
+// Standard-Anbieter â€“ eigene KI zuerst, Groq als Online-Fallback
+const _defaultProviders = [
+  {
+    id:      'local',
+    name:    'Eigene KI (LernStar)',
+    url:     'http://localhost:5000/v1/chat/completions',
+    key:     'local',
+    model:   'lernstar-finetuned',
+    builtin: true,
+    active:  true
+  },
+  {
+    id:      'groq',
+    name:    'Groq (Online-Fallback)',
+    url:     'https://api.groq.com/openai/v1/chat/completions',
+    key:     GROQ_KEY,
+    model:   'llama-3.3-70b-versatile',
+    builtin: true,
+    active:  true
+  }
+];
+
+// LÃ¤dt benutzerdefinierte Anbieter aus localStorage
+function _getProviders() {
+  const custom = JSON.parse(localStorage.getItem('ls_ai_providers') || '[]');
+  return [..._defaultProviders, ...custom];
 }
 
-const CHAT_SYSTEM = `Du bist Herr Lala, ein freundlicher und geduldiger Lernassistent auf der Schullernplattform LernStar. Du hilfst SchÃ¼lerinnen und SchÃ¼lern der Klassen 5â€“13 in Deutschland beim Verstehen von Schulstoffen. Antworte immer auf Deutsch. ErklÃ¤re in einfacher, kindgerechter Sprache mit kurzen SÃ¤tzen und konkreten Alltagsbeispielen. Halte deine Antworten kurz (maximal 4â€“5 SÃ¤tze). Bei Mathe- oder Physikaufgaben zeige den LÃ¶sungsweg klar Schritt fÃ¼r Schritt. Sei freundlich, ermutigend und positiv. Verwende gelegentlich passende Emojis.`;
+// Universelle KI-Aufruf-Funktion â€“ probiert alle aktiven Anbieter der Reihe nach
+async function _aiCall(messages, opts = {}) {
+  const providers = _getProviders().filter(p => p.active && p.url && p.key);
+  let lastErr = new Error('Kein KI-Anbieter konfiguriert.');
+
+  for (const p of providers) {
+    try {
+      const body = {
+        model:       opts.model || p.model,
+        messages,
+        max_tokens:  opts.max_tokens  ?? 700,
+        temperature: opts.temperature ?? 0.7
+      };
+      if (opts.response_format) body.response_format = opts.response_format;
+
+      const res = await fetch(p.url, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${p.key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e?.error?.message || `HTTP ${res.status}`);
+      }
+
+      const data    = await res.json();
+      const content = data.choices?.[0]?.message?.content;
+      if (content) return content;
+      throw new Error('Leere Antwort.');
+    } catch (e) {
+      lastErr = e;
+      console.warn(`[LernStar] Anbieter "${p.name}" fehlgeschlagen: ${e.message}`);
+    }
+  }
+  throw lastErr;
+}
+
+// ============================================================
+// CHAT WIDGET  â€“  Herr Lala KI-Assistent
+// ============================================================
+
+// â”€â”€ Lernstoff-Kontext: aktuelle Themen-Inhalte aus content.js â”€â”€
+function _buildCurriculumContext() {
+  const g = state.gradeId, s = state.subjectId;
+  if (!g || !s) return '';
+  const subject = CONTENT[g]?.subjects.find(x => x.id === s);
+  if (!subject) return '';
+
+  let ctx = `\n\nðŸ“š LERNSTOFF (LernStar-Curriculum â€“ ${subject.name}):\n`;
+
+  // Aktuelle Themen-ErklÃ¤rung einbinden
+  if (state.currentTopicName) {
+    const t = subject.topics.find(x => x.name === state.currentTopicName);
+    if (t?.explanation) {
+      ctx += `Aktuelles Thema â€ž${t.name}":\n${t.explanation}\n`;
+    }
+  }
+
+  // Alle Themen des Fachs auflisten (Ãœberblick fÃ¼r Herr Lala)
+  const names = subject.topics.filter(t => !t.isChapter).map(t => t.name);
+  if (names.length) ctx += `Alle Themen: ${names.slice(0, 20).join(' Â· ')}`;
+  return ctx;
+}
+
+// â”€â”€ Langzeit-GedÃ¤chtnis: Lernhistorie aus localStorage â”€â”€â”€â”€â”€â”€
+function _buildMemoryContext() {
+  const entries = Object.entries(state.progress);
+  if (!entries.length) return '';
+  const avg    = Math.round(entries.reduce((s,[,v]) => s+v, 0) / entries.length);
+  const weak   = [...new Set(entries.filter(([,v]) => v<60).map(([k]) => k.split('_')[1]))].slice(0,4);
+  const strong = [...new Set(entries.filter(([,v]) => v>=80).map(([k]) => k.split('_')[1]))].slice(0,4);
+  let mem = `\n\nðŸ§  GEDÃ„CHTNIS â€“ Lernhistorie von ${state.userName||'dem SchÃ¼ler'}:\n`;
+  mem += `${entries.length} Aufgaben gelÃ¶st Â· Ã˜ ${avg}% Erfolg\n`;
+  if (strong.length) mem += `StÃ¤rken: ${strong.join(', ')}\n`;
+  if (weak.length)   mem += `Schwachstellen: ${weak.join(', ')}\n`;
+  return mem;
+}
+
+function _getChatSystem() {
+  const name     = state.userName;
+  const gradeRaw = state.gradeId;
+  const grade    = gradeRaw ? `Klasse ${gradeRaw.replace('klasse','')}` : null;
+  const subj     = gradeRaw && state.subjectId
+    ? CONTENT[gradeRaw]?.subjects.find(s => s.id === state.subjectId)?.name || null
+    : null;
+  const topic    = state.currentTopicName;
+  const goalMap  = { normal:'allgemeines Lernen', zap:'ZAP-PrÃ¼fung', abitur:'Abitur-Vorbereitung' };
+  const goal     = goalMap[state.learningGoal] || 'Lernen';
+
+  let wer = 'Du hilfst';
+  if (name)  wer += ` ${name}`;
+  if (grade) wer += ` aus ${grade}`;
+  if (subj)  wer += ` im Fach ${subj}`;
+  if (topic) wer += ` beim Thema â€ž${topic}"`;
+  wer += ` (Ziel: ${goal}).`;
+
+  return `Du bist Herr Lala â€“ der persÃ¶nliche KI-Tutor der Lernplattform LernStar.
+Du bist kein allgemeiner Chatbot. Du kennst jeden Inhalt von LernStar auswendig und arbeitest ausschlieÃŸlich fÃ¼r diese Plattform.
+${wer}
+
+PERSÃ–NLICHKEIT:
+- Du unterrichtest seit 15 Jahren Mathematik und Physik und liebst Aha-Momente.
+- Du erinnerst dich an alles was in diesem GesprÃ¤ch besprochen wurde.
+- Du bist geduldig: wenn jemand es nicht versteht, versuchst du eine andere ErklÃ¤rung.
+- Du fragst nach dem GesprÃ¤ch immer: â€žHast du noch Fragen dazu?"
+- Du kennst den SchÃ¼ler persÃ¶nlich und gehst auf seine StÃ¤rken und SchwÃ¤chen ein.
+${state.learningGoal === 'zap' ? '- Du bereitest gezielt auf die ZAP-PrÃ¼fung vor und kennst typische Aufgabenformate.' : ''}
+${state.learningGoal === 'abitur' ? '- Du erklÃ¤rst auf Abiturniveau mit vollstÃ¤ndigen Herleitungen und Fachbegriffen.' : ''}${_buildMemoryContext()}${_buildCurriculumContext()}
+
+ANTWORTREGELN:
+- Antworte IMMER auf Deutsch.
+- Niveau anpassen an${grade ? ` ${grade}` : ' SchÃ¼ler'}.
+- ${name ? `Sprich ${name} mit Namen an.` : 'Sprich den SchÃ¼ler direkt an.'}
+- Alltagsbeispiele nutzen (Pizza, Geld, Sport, Smartphones).
+- Bei Fehlern: erst Mut machen, dann ErklÃ¤rung.
+
+MATHEMATIK: Jeden Ausdruck in $...$: $\\frac{3}{4}$ Â· $v = s \\cdot t$ Â· $\\sqrt{9}=3$. Niemals $$.`;
+}
 
 let _chatOpen = false;
+let _chatHistory = []; // GesprÃ¤chsverlauf fÃ¼r Multi-Turn-Kontext (max. 12 Nachrichten)
 
 function _chatToggle() {
   _chatOpen = !_chatOpen;
@@ -1763,11 +2041,36 @@ function _chatClose() {
   document.getElementById('chatOverlay').classList.remove('visible');
 }
 
+function _fixMath(t) {
+  // Entferne \text{...} â€“ nur den Inhalt behalten
+  t = t.replace(/\\text\{([^}]*)\}/g, '$1');
+  // Alle $ entfernen (KaTeX-Delimiter) â€“ wir ersetzen BrÃ¼che direkt durch HTML
+  t = t.replace(/\$/g, '');
+  // \frac{a}{b} â†’ HTML-Bruch
+  t = t.replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g,
+    '<span class="chat-frac"><sup>$1</sup><span>â„</span><sub>$2</sub></span>');
+  // \sqrt{x} â†’ âˆšx
+  t = t.replace(/\\sqrt\{([^}]*)\}/g, 'âˆš$1');
+  // ^2 â†’ Â²
+  t = t.replace(/\^(\d)/g, '<sup>$1</sup>');
+  // Ãœbrige LaTeX-Befehle: Inhalt behalten
+  t = t.replace(/\\[a-zA-Z]+\{([^}]*)\}/g, '$1');
+  t = t.replace(/\\[a-zA-Z]+/g, '');
+  // Einfache BrÃ¼che im Text: 1/4 â†’ HTML
+  t = t.replace(/\b(\d+)\/(\d+)\b/g,
+    '<span class="chat-frac"><sup>$1</sup><span>â„</span><sub>$2</sub></span>');
+  return t;
+}
+
 function _chatAddBubble(text, role) {
   const msgs = document.getElementById('chatMessages');
   const div  = document.createElement('div');
   div.className = `chat-bubble chat-bubble-${role}`;
-  div.innerHTML = text.replace(/\n/g, '<br>');
+  if (role === 'bot' && typeof marked !== 'undefined') {
+    div.innerHTML = marked.parse(_fixMath(text));
+  } else {
+    div.innerHTML = text.replace(/\n/g, '<br>');
+  }
   msgs.appendChild(div);
   msgs.scrollTop = msgs.scrollHeight;
   return div;
@@ -1839,66 +2142,46 @@ async function _chatAsk(question) {
   sendBtn.disabled = true;
   _chatShowTyping();
 
-  if (!getGroqKey()) {
-    _chatHideTyping();
-    _chatAddBubble('âš ï¸ Kein API-Key eingetragen. Bitte trage deinen Groq-Key bei GROQ_KEY ein.', 'error');
-    sendBtn.disabled = false;
-    return;
-  }
-
   try {
-    let userContent;
+    // GesprÃ¤chsverlauf aufbauen (System + Verlauf + neue Nachricht)
+    const historySlice = _chatHistory.slice(-12);
+    let answer;
+
     if (hasImage) {
-      userContent = [
+      // Bildverarbeitung: direkt Ã¼ber Groq (braucht Vision-Modell)
+      const userContent = [
         { type: 'image_url', image_url: { url: `data:${imgMime};base64,${imgB64}` } },
-        { type: 'text', text: question || 'Bitte lÃ¶se diese Aufgabe Schritt fÃ¼r Schritt und erklÃ¤re den LÃ¶sungsweg auf einfache Weise auf Deutsch.' },
+        { type: 'text', text: question || 'Bitte lÃ¶se diese Aufgabe Schritt fÃ¼r Schritt auf Deutsch.' },
       ];
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+          messages: [{ role: 'system', content: _getChatSystem() }, ...historySlice, { role: 'user', content: userContent }],
+          max_tokens: 700, temperature: 0.7
+        })
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const d = await res.json();
+      answer = d.choices?.[0]?.message?.content || '(Keine Antwort)';
     } else {
-      userContent = question;
+      // Text: Ã¼ber _aiCall() mit automatischem Fallback
+      const messages = [
+        { role: 'system', content: _getChatSystem() },
+        ...historySlice,
+        { role: 'user', content: question }
+      ];
+      answer = await _aiCall(messages, { max_tokens: 700, temperature: 0.7 });
     }
 
-    const model = hasImage ? 'meta-llama/llama-4-scout-17b-16e-instruct' : 'llama-3.1-8b-instant';
-
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${getGroqKey()}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: CHAT_SYSTEM },
-          { role: 'user',   content: userContent },
-        ],
-        max_tokens: 600,
-        temperature: 0.7,
-      }),
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      if (res.status === 401 || res.status === 403) {
-        _chatHideTyping();
-        sendBtn.disabled = false;
-        _showKeyInput('🔑 API-Key abgelaufen oder ungültig. Neuen Key eingeben:');
-        return;
-      }
-      throw new Error(err?.error?.message || `HTTP ${res.status}`);
-    }
-
-    const data   = await res.json();
-    const answer = data.choices?.[0]?.message?.content || '(Keine Antwort erhalten)';
+    // Verlauf aktualisieren (nur Text, kein Bild-Blob speichern)
+    _chatHistory.push({ role: 'user',      content: hasImage ? '[Bild] ' + (question || '') : question });
+    _chatHistory.push({ role: 'assistant', content: answer });
 
     _chatHideTyping();
     _chatAddBubble(answer, 'bot');
 
-    // Avatar spricht die Antwort vor
-    if (ELEVEN_KEY) {
-      _elevenSpeakText(answer, null);
-    } else {
-      _speakSequential(answer, null, false);
-    }
 
   } catch (e) {
     _chatHideTyping();
@@ -1908,6 +2191,584 @@ async function _chatAsk(question) {
     input.focus();
   }
 }
+
+// ============================================================
+// KI FEATURES â€“ Onboarding, PrÃ¼fungsmodus, Lernanalyse
+// ============================================================
+
+// â”€â”€ ONBOARDING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function checkOnboarding() {
+  const overlay = document.getElementById('onboardingOverlay');
+  if (!overlay) return;
+  if (!state.onboardingDone) {
+    overlay.classList.remove('hidden');
+    setTimeout(() => document.getElementById('obNameInput')?.focus(), 200);
+  }
+  _updateKIBadges();
+}
+
+function obSetName() {
+  const input = document.getElementById('obNameInput');
+  const name  = input?.value.trim();
+  if (!name) { input?.focus(); return; }
+  state.userName = name;
+  localStorage.setItem('ls_userName', name);
+  const greetEl = document.getElementById('obGreetName');
+  if (greetEl) greetEl.textContent = name;
+  document.getElementById('obStep1').classList.add('hidden');
+  document.getElementById('obStep2').classList.remove('hidden');
+}
+
+function obSetGoal(goal) {
+  state.learningGoal  = goal;
+  state.onboardingDone = true;
+  localStorage.setItem('ls_learningGoal', goal);
+  localStorage.setItem('ls_onboardingDone', '1');
+  const overlay = document.getElementById('onboardingOverlay');
+  if (overlay) overlay.classList.add('hidden');
+  _updateKIBadges();
+}
+
+function resetOnboarding() {
+  state.onboardingDone = false;
+  state.userName = null;
+  state.learningGoal = 'normal';
+  ['ls_onboardingDone','ls_userName','ls_learningGoal'].forEach(k => localStorage.removeItem(k));
+  closeSidebar();
+  checkOnboarding();
+}
+
+function _updateKIBadges() {
+  const nameBadge = document.getElementById('userNameBadge');
+  const goalBadge = document.getElementById('goalBadge');
+  if (nameBadge) {
+    if (state.userName) {
+      nameBadge.textContent = `ðŸ‘¤ ${state.userName}`;
+      nameBadge.style.display = '';
+    } else {
+      nameBadge.style.display = 'none';
+    }
+  }
+  if (goalBadge) {
+    const icons   = { normal:'ðŸ“š', zap:'ðŸŽ¯', abitur:'ðŸ†' };
+    const labels  = { normal:'Lernen', zap:'ZAP', abitur:'Abitur' };
+    goalBadge.textContent = `${icons[state.learningGoal]||'ðŸ“š'} ${labels[state.learningGoal]||'Lernen'}`;
+    goalBadge.style.display = '';
+  }
+}
+
+// â”€â”€ KI-AUFGABE GENERIEREN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+let _aiExPending = false;
+
+async function generateAIExercise() {
+  if (_aiExPending) return;
+  const gradeId   = state.gradeId;
+  const subjectId = state.subjectId;
+  if (!gradeId || !subjectId) return;
+
+  const gradeNum    = gradeId.replace('klasse', '');
+  const subjectName = CONTENT[gradeId]?.subjects.find(s => s.id === subjectId)?.name || subjectId;
+  const topic       = state.currentTopicName || null;
+  const diffNum     = state.examDiff || 2;
+
+  const btn = document.getElementById('aiExerciseBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'â³ KI generiertâ€¦'; }
+  _aiExPending = true;
+
+  try {
+    // 1. Eigene KI (lokale Aufgaben in localStorage)
+    if (typeof LernStarAI !== 'undefined' && LernStarAI.count() > 0) {
+      const ex = LernStarAI.generateMC(subjectName, gradeNum, topic, diffNum);
+      if (ex) { _renderAIExBox(ex); return; }
+    }
+
+    // 2. Groq / externer Anbieter als Fallback
+    const diffMap = { 1:'einfach', 2:'mittelschwer', 3:'schwer' };
+    const diff    = diffMap[diffNum] || 'mittelschwer';
+    const prompt  = `Erstelle eine ${diff}e Multiple-Choice-Aufgabe fÃ¼r Klasse ${gradeNum} ${subjectName}`
+      + (topic ? ` zum Thema â€ž${topic}"` : '') + '.\n'
+      + 'Das JSON muss enthalten: title, question, options (4 Strings), correct (0-3), explanation, hint.';
+
+    const raw    = await _aiCall([
+      { role: 'system', content: 'Du bist Schullehrer. Antworte nur mit JSON: title, question, options, correct, explanation, hint.' },
+      { role: 'user',   content: prompt }
+    ], { max_tokens: 600, temperature: 0.8 });
+
+    const parsed = _parseAIJSON(raw);
+    if (parsed) {
+      parsed.title       = parsed.title       || 'KI-Aufgabe';
+      parsed.options     = parsed.options      || ['A','B','C','D'];
+      parsed.correct     = parsed.correct      ?? 0;
+      parsed.explanation = parsed.explanation  || '';
+      parsed.hint        = parsed.hint         || '';
+      _renderAIExBox(parsed);
+    } else {
+      _renderAIExBox(null, '');
+    }
+  } catch {
+    _renderAIExBox(null, '');
+  } finally {
+    _aiExPending = false;
+    if (btn) { btn.disabled = false; btn.textContent = 'ðŸ”„ Neue KI-Aufgabe'; }
+  }
+}
+
+function _escQ(s) { return String(s).replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+
+function _renderAIExBox(ex, err) {
+  const box = document.getElementById('aiExerciseBox');
+  if (!box) return;
+  box.classList.remove('hidden');
+  if (err) { box.classList.add('hidden'); return; }
+  box.innerHTML = `
+    <div class="ai-ex-badge">ðŸ¤– KI-generiert</div>
+    <div class="ai-ex-title">${ex.title}</div>
+    <div class="ai-ex-question">${ex.question}</div>
+    <div class="ai-ex-options">
+      ${ex.options.map((opt,i) => `
+        <button class="ai-ex-opt" onclick="_checkAIEx(${i},${ex.correct},this,'${_escQ(ex.explanation)}')">
+          <span class="ai-ex-opt-letter">${'ABCD'[i]}</span>${opt}
+        </button>`).join('')}
+    </div>
+    <button class="hint-toggle-btn" style="margin-top:10px" onclick="this.nextElementSibling.classList.toggle('hidden')">ðŸ’¡ Tipp</button>
+    <div class="quiz-hint hidden">${ex.hint}</div>
+    <div class="ai-ex-expl hidden" id="aiExExpl"></div>`;
+}
+
+function _checkAIEx(chosen, correct, btn, explanation) {
+  document.querySelectorAll('.ai-ex-opt').forEach(b => b.disabled = true);
+  const isRight = chosen === correct;
+  document.querySelectorAll('.ai-ex-opt')[correct].classList.add('ai-ex-correct');
+  if (!isRight) btn.classList.add('ai-ex-wrong');
+  const expl = document.getElementById('aiExExpl');
+  if (expl) { expl.textContent = explanation; expl.classList.remove('hidden'); }
+}
+
+// â”€â”€ PRÃœFUNGSMODUS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function renderExamPrep() {
+  showView('viewExamPrep');
+  setExamMode(state.examMode);
+
+  const gradeId = state.gradeId;
+  const btns    = document.getElementById('examSubjectBtns');
+  if (!btns) return;
+  btns.innerHTML = '';
+
+  let subjects = [];
+  if (gradeId && CONTENT[gradeId]) {
+    subjects = CONTENT[gradeId].subjects;
+  } else {
+    const seen = new Set();
+    Object.values(CONTENT).forEach(g => g.subjects.forEach(s => {
+      if (!seen.has(s.id)) { seen.add(s.id); subjects.push(s); }
+    }));
+  }
+
+  subjects.forEach(s => {
+    const b = document.createElement('button');
+    b.className = 'exam-subject-btn' + (state.examSubjectId === s.id ? ' active' : '');
+    b.innerHTML = `${s.icon||''} ${s.name}`;
+    b.onclick = () => { state.examSubjectId = s.id; document.querySelectorAll('.exam-subject-btn').forEach(x => x.classList.remove('active')); b.classList.add('active'); };
+    btns.appendChild(b);
+  });
+
+  if (!state.examSubjectId && subjects.length) {
+    state.examSubjectId = subjects[0].id;
+    btns.firstChild?.classList.add('active');
+  }
+
+  ['examSession','examResults'].forEach(id => document.getElementById(id)?.classList.add('hidden'));
+  document.getElementById('examSetup')?.classList.remove('hidden');
+}
+
+function setExamMode(mode) {
+  state.examMode = mode;
+  document.getElementById('tabZAP')?.classList.toggle('active', mode === 'zap');
+  document.getElementById('tabAbi')?.classList.toggle('active', mode === 'abitur');
+  const title = document.getElementById('examPrepTitle');
+  const sub   = document.getElementById('examPrepSub');
+  if (title) title.textContent = mode === 'zap' ? 'ðŸŽ¯ ZAP-Vorbereitung' : 'ðŸ† Abitur-Vorbereitung';
+  if (sub)   sub.textContent   = mode === 'zap'
+    ? 'KI-generierte Aufgaben im ZAP-Stil Â· Klasse 9â€“10'
+    : 'KI-generierte Aufgaben auf Abiturniveau Â· Gymnasium';
+}
+
+function setExamDiff(diff) {
+  state.examDiff = diff;
+  document.querySelectorAll('.exam-diff-btn').forEach(b => b.classList.toggle('active', +b.dataset.diff === diff));
+}
+
+// Robuste JSON-Extraktion: funktioniert auch mit Markdown-CodeblÃ¶cken
+function _parseAIJSON(text) {
+  let t = text.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '').trim();
+  try { const p = JSON.parse(t); if (p) return p; } catch {}
+  const arrM = t.match(/\[[\s\S]*\]/);
+  if (arrM) { try { const p = JSON.parse(arrM[0]); if (p) return p; } catch {} }
+  const objM = t.match(/\{[\s\S]*\}/);
+  if (objM) { try { const p = JSON.parse(objM[0]); if (p) return p; } catch {} }
+  return null;
+}
+
+// Fragen aus beliebigem Struktur extrahieren (key-unabhÃ¤ngig)
+function _extractQuestions(parsed) {
+  if (!parsed) return [];
+  if (Array.isArray(parsed)) return parsed.filter(q => q.question || q.frage || q.Frage);
+  // Beliebigen Array-Wert im Objekt suchen (erster Array mit Fragenstruktur)
+  for (const val of Object.values(parsed)) {
+    if (Array.isArray(val) && val.length > 0) {
+      const first = val[0];
+      if (first && (first.question || first.frage || first.Frage || first.options || first.Antworten)) {
+        // Normalisieren: unterschiedliche Feldnamen vereinheitlichen
+        return val.map(q => ({
+          question:    q.question || q.frage || q.Frage || q.text || '?',
+          options:     q.options  || q.Antworten || q.antworten || ['A','B','C','D'],
+          correct:     typeof q.correct !== 'undefined' ? q.correct : (q.richtig ?? 0),
+          explanation: q.explanation || q.ErklÃ¤rung || q.erklaerung || ''
+        }));
+      }
+    }
+  }
+  return [];
+}
+
+let _examRunning = false;
+
+async function startExamSession() {
+  if (_examRunning) return;
+  if (!state.examSubjectId) { alert('Bitte erst ein Fach auswÃ¤hlen.'); return; }
+
+  document.getElementById('examSetup')?.classList.add('hidden');
+  document.getElementById('examResults')?.classList.add('hidden');
+  document.getElementById('examSession')?.classList.remove('hidden');
+
+  const card = document.getElementById('examQuestionCard');
+  if (card) card.innerHTML = '<div class="exam-loading">â³ Herr Lala bereitet 5 Aufgaben vorâ€¦</div>';
+
+  state.examSession = { questions:[], current:0, score:0, answers:[] };
+  _examRunning = true;
+
+  const gradeNum = state.gradeId ? state.gradeId.replace('klasse','') : '10';
+  const subjName = state.gradeId
+    ? CONTENT[state.gradeId]?.subjects.find(s => s.id === state.examSubjectId)?.name || state.examSubjectId
+    : state.examSubjectId;
+  const modeText = state.examMode === 'zap'
+    ? 'ZAP-AbschlussprÃ¼fung (Klasse 10, Deutschland)'
+    : 'Abitur (gymnasiale Oberstufe, Deutschland)';
+  const diffMap  = { 1:'einfach', 2:'mittelschwer', 3:'schwer' };
+  const diff     = diffMap[state.examDiff] || 'mittelschwer';
+
+  try {
+    const prompt = `Erstelle genau 5 ${diff}e Multiple-Choice-Fragen fÃ¼r das Schulfach ${subjName}, Klasse ${gradeNum}, im Stil einer ${modeText}.
+Jede Frage hat genau 4 AntwortmÃ¶glichkeiten. Der Wert "correct" ist der Index (0-3) der richtigen Antwort.
+Antworte mit einem JSON-Objekt in diesem Format:
+{"questions":[{"question":"...","options":["A","B","C","D"],"correct":0,"explanation":"..."},{"question":"...","options":["...","...","...","..."],"correct":1,"explanation":"..."},{"question":"...","options":["...","...","...","..."],"correct":2,"explanation":"..."},{"question":"...","options":["...","...","...","..."],"correct":0,"explanation":"..."},{"question":"...","options":["...","...","...","..."],"correct":3,"explanation":"..."}]}`;
+
+    const raw = await _aiCall([
+      { role: 'system', content: 'Du bist ein PrÃ¼fungsersteller fÃ¼r deutsche Schulen. Antworte immer mit einem JSON-Objekt mit einem "questions"-Array.' },
+      { role: 'user', content: prompt }
+    ], { max_tokens: 2000, temperature: 0.65, response_format: { type: 'json_object' } });
+    const parsed = _parseAIJSON(raw);
+    const questions = _extractQuestions(parsed);
+    if (!questions.length) throw new Error('Keine Fragen erhalten â€“ bitte nochmal versuchen.');
+    state.examSession.questions = questions.slice(0,5);
+    _showExamQ(0);
+  } catch (e) {
+    if (card) card.innerHTML = `<div class="ai-ex-error">âŒ ${e.message}<br><br><button class="btn-secondary" onclick="startExamSession()">ðŸ”„ Nochmal</button> <button class="btn-secondary" onclick="renderExamPrep()">â† ZurÃ¼ck</button></div>`;
+  } finally {
+    _examRunning = false;
+  }
+}
+
+function _showExamQ(idx) {
+  const q     = state.examSession.questions[idx];
+  if (!q) return;
+  const total = state.examSession.questions.length;
+  const fill  = document.getElementById('examProgressFill');
+  const ctr   = document.getElementById('examQCounter');
+  if (fill) fill.style.width = `${(idx/total)*100}%`;
+  if (ctr)  ctr.textContent  = `Frage ${idx+1} / ${total}`;
+
+  const card = document.getElementById('examQuestionCard');
+  if (!card) return;
+  card.innerHTML = `
+    <div class="exam-q-text">${q.question}</div>
+    <div class="exam-q-opts">
+      ${q.options.map((opt,i) => `
+        <button class="exam-q-opt" onclick="_answerExamQ(${i})">
+          <span class="exam-opt-letter">${'ABCD'[i]}</span>${opt}
+        </button>`).join('')}
+    </div>
+    <div class="exam-q-fb hidden" id="examFB"></div>
+    <div class="hidden" id="examNext">
+      <button class="btn-primary" style="margin-top:16px" onclick="_nextExamQ()">
+        ${idx+1 < total ? 'NÃ¤chste Frage â†’' : 'ðŸ“Š Auswertung anzeigen'}
+      </button>
+    </div>`;
+}
+
+function _answerExamQ(chosen) {
+  const q = state.examSession.questions[state.examSession.current];
+  const ok = chosen === q.correct;
+  if (ok) state.examSession.score++;
+  state.examSession.answers.push({ chosen, correct: q.correct });
+
+  document.querySelectorAll('.exam-q-opt').forEach(b => b.disabled = true);
+  document.querySelectorAll('.exam-q-opt')[q.correct].classList.add('exam-correct');
+  if (!ok) document.querySelectorAll('.exam-q-opt')[chosen].classList.add('exam-wrong');
+
+  const fb = document.getElementById('examFB');
+  if (fb) {
+    fb.textContent = (ok ? 'âœ… Richtig! ' : 'âŒ Falsch. ') + q.explanation;
+    fb.className   = `exam-q-fb ${ok ? 'exam-fb-ok' : 'exam-fb-err'}`;
+  }
+  document.getElementById('examNext')?.classList.remove('hidden');
+}
+
+function _nextExamQ() {
+  const next = ++state.examSession.current;
+  if (next < state.examSession.questions.length) _showExamQ(next);
+  else _showExamResults();
+}
+
+function _showExamResults() {
+  const { score, questions, answers } = state.examSession;
+  const total = questions.length;
+  const pct   = Math.round((score/total)*100);
+  document.getElementById('examSession')?.classList.add('hidden');
+
+  const res = document.getElementById('examResults');
+  if (!res) return;
+  res.classList.remove('hidden');
+
+  const emoji  = pct>=80?'ðŸ†':pct>=60?'ðŸ˜Š':'ðŸ’ª';
+  const msg    = pct>=80?'Ausgezeichnet!':pct>=60?'Gut gemacht!':'Weiter Ã¼ben!';
+  const status = pct>=80?'ðŸŸ¢ Bestanden':pct>=60?'ðŸŸ¡ Knapp bestanden':'ðŸ”´ Mehr Ãœbung nÃ¶tig';
+
+  res.innerHTML = `
+    <div class="exam-res-header">
+      <div class="exam-res-emoji">${emoji}</div>
+      <div class="exam-res-title">${msg}</div>
+      <div class="exam-res-score">${score} / ${total} richtig (${pct}%)</div>
+      <div class="exam-res-status">${status}</div>
+    </div>
+    <div class="exam-res-review">
+      ${questions.map((q,i) => {
+        const ans = answers[i]; const ok = ans?.chosen===ans?.correct;
+        return `<div class="exam-rev-item ${ok?'exam-rev-ok':'exam-rev-fail'}">
+          <span class="exam-rev-n">${i+1}</span>
+          <span class="exam-rev-q">${q.question}</span>
+          <span>${ok?'âœ…':'âŒ'}</span>
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="exam-res-actions">
+      <button class="btn-primary" onclick="startExamSession()">ðŸ”„ Nochmal</button>
+      <button class="btn-secondary" onclick="renderExamPrep()">â† Neue Sitzung</button>
+      <button class="btn-secondary" onclick="navigate('home')">ðŸ  Startseite</button>
+    </div>`;
+}
+
+// â”€â”€ LERNANALYSE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function renderAnalyse() {
+  showView('viewAnalyse');
+
+  const userInfo = document.getElementById('analyseUserInfo');
+  if (userInfo) {
+    const name = state.userName || 'Anonym';
+    const goalLbl = { normal:'Allgemeines Lernen', zap:'ZAP-Vorbereitung', abitur:'Abitur-Vorbereitung' };
+    userInfo.innerHTML = `<span class="an-name">ðŸ‘¤ ${name}</span> <span class="an-goal">${goalLbl[state.learningGoal]||'Lernen'}</span>`;
+  }
+
+  const entries = Object.entries(state.progress);
+  const grid = document.getElementById('analyseGrid');
+  if (!grid) return;
+
+  if (!entries.length) {
+    grid.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:40px 20px">Noch keine Aufgaben gelÃ¶st. Starte jetzt und komm dann wieder!</p>';
+    const aiEl = document.getElementById('analyseAiText');
+    if (aiEl) aiEl.textContent = 'Keine Daten vorhanden. LÃ¶se ein paar Aufgaben!';
+    return;
+  }
+
+  // Gesamtstatistik
+  const allScores = entries.map(([,v]) => v);
+  const avgAll    = Math.round(allScores.reduce((a,b) => a+b, 0) / allScores.length);
+
+  // Pro Fach
+  const bySub = {};
+  entries.forEach(([k, score]) => {
+    const parts = k.split('_');
+    if (parts.length < 3) return;
+    const s = parts[1];
+    if (!bySub[s]) bySub[s] = [];
+    bySub[s].push(score);
+  });
+
+  grid.innerHTML = '';
+  const totalCard = document.createElement('div');
+  totalCard.className = 'an-card an-card-total';
+  totalCard.innerHTML = `
+    <div class="an-icon">ðŸ“Š</div>
+    <div class="an-val">${entries.length}</div>
+    <div class="an-lbl">Aufgaben gelÃ¶st</div>
+    <div class="an-avg">${avgAll}% Ã˜ Erfolg</div>`;
+  grid.appendChild(totalCard);
+
+  Object.entries(bySub).forEach(([subj, scores]) => {
+    const avg  = Math.round(scores.reduce((a,b) => a+b, 0) / scores.length);
+    const col  = avg>=80?'#059669':avg>=60?'#D97706':'#DC2626';
+    const lbl  = avg>=80?'ðŸŸ¢ Stark':avg>=60?'ðŸŸ¡ Mittel':'ðŸ”´ Ãœben';
+    const icon = subj==='mathe'?'ðŸ“':subj==='physik'?'âš›ï¸':'ðŸ“š';
+    const card = document.createElement('div');
+    card.className = 'an-card';
+    card.innerHTML = `
+      <div class="an-icon">${icon}</div>
+      <div class="an-val" style="color:${col}">${avg}%</div>
+      <div class="an-lbl">${subj[0].toUpperCase()+subj.slice(1)}</div>
+      <div class="an-avg">${lbl} Â· ${scores.length} Aufgaben</div>
+      <div class="an-bar-wrap"><div class="an-bar" style="width:${avg}%;background:${col}"></div></div>`;
+    grid.appendChild(card);
+  });
+
+  // Schwachstellen
+  const weak = entries.filter(([,v]) => v < 60);
+  const weakBox = document.getElementById('analyseWeaknesses');
+  if (weakBox) {
+    weakBox.innerHTML = weak.length === 0
+      ? '<div class="an-strong">ðŸŽ‰ Keine Schwachstellen â€“ weiter so!</div>'
+      : `<h3 class="an-weak-title">âš ï¸ Verbesserungspotenzial (${weak.length} Aufgaben unter 60%)</h3>
+         <div class="an-weak-list">${weak.slice(0,6).map(([k,v]) => {
+           const p = k.split('_');
+           return `<div class="an-weak-item"><span>ðŸ“Œ ${p[1]||'?'} Â· ${p[2]||'?'}</span><span class="an-weak-score">${v}%</span></div>`;
+         }).join('')}</div>`;
+  }
+
+  _loadAnalyseAI(entries, bySub, avgAll);
+}
+
+async function _loadAnalyseAI(entries, bySub, avgAll) {
+  const el = document.getElementById('analyseAiText');
+  if (!el) return;
+  el.textContent = 'â³ Analyse lÃ¤uftâ€¦';
+
+  const name    = state.userName || 'du';
+  const subjSum = Object.entries(bySub).map(([s,sc]) => {
+    const avg = Math.round(sc.reduce((a,b) => a+b, 0) / sc.length);
+    return `${s} ${avg}% (${sc.length} Aufg.)`;
+  }).join(', ');
+
+  try {
+    const content = await _aiCall([
+      { role: 'system', content: 'Du bist Herr Lala, ein ermutigender Schultutor. Antworte auf Deutsch, 3â€“4 SÃ¤tze, persÃ¶nlich und motivierend.' },
+      { role: 'user',   content: `Ich heiÃŸe ${name}. Ergebnisse: ${entries.length} Aufgaben, Ã˜ ${avgAll}%. FÃ¤cher: ${subjSum}. Gib mir eine persÃ¶nliche RÃ¼ckmeldung und einen konkreten nÃ¤chsten Schritt.` }
+    ], { max_tokens: 180 });
+    el.textContent = content;
+  } catch {
+    el.textContent = `Toll, ${name}! Du hast bereits ${entries.length} Aufgaben gelÃ¶st. Schau dir die Schwachstellen an und Ã¼be gezielt weiter!`;
+  }
+}
+
+// â”€â”€ AI SETTINGS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function openAISettings() {
+  const modal = document.getElementById('aiSettingsModal');
+  if (!modal) return;
+  _renderProviderList();
+  modal.classList.remove('hidden');
+}
+
+function closeAISettings() {
+  document.getElementById('aiSettingsModal')?.classList.add('hidden');
+}
+
+function _renderProviderList() {
+  const list = document.getElementById('aiProviderList');
+  if (!list) return;
+  const custom = JSON.parse(localStorage.getItem('ls_ai_providers') || '[]');
+  const all = [..._defaultProviders, ...custom];
+  list.innerHTML = all.map((p, i) => `
+    <div class="ai-provider-item ${p.active ? 'active' : 'inactive'}">
+      <div class="ai-provider-info">
+        <strong>${p.name}</strong>
+        <span class="ai-provider-url">${p.url}</span>
+        <span class="ai-provider-model">${p.model}</span>
+      </div>
+      <div class="ai-provider-actions">
+        ${p.builtin
+          ? `<span class="ai-provider-builtin">Standard</span>`
+          : `<button class="btn-ai-remove" onclick="removeProvider(${i - _defaultProviders.length})">âœ• Entfernen</button>`
+        }
+      </div>
+    </div>
+  `).join('');
+}
+
+function saveOllamaProvider() {
+  const url = (document.getElementById('ollamaUrl')?.value || '').trim() || 'http://localhost:11434/v1/chat/completions';
+  const model = (document.getElementById('ollamaModel')?.value || '').trim() || 'llama3';
+  _addCustomProvider({ id: 'ollama_' + Date.now(), name: 'Ollama (Lokal)', url, key: 'ollama', model });
+}
+
+function saveCustomProvider() {
+  const name  = (document.getElementById('customName')?.value  || '').trim();
+  const url   = (document.getElementById('customUrl')?.value   || '').trim();
+  const key   = (document.getElementById('customKey')?.value   || '').trim();
+  const model = (document.getElementById('customModel')?.value || '').trim();
+  if (!url || !key || !model) { alert('Bitte URL, API-Key und Modell angeben.'); return; }
+  _addCustomProvider({ id: 'custom_' + Date.now(), name: name || 'Eigene API', url, key, model });
+}
+
+function _addCustomProvider(p) {
+  const custom = JSON.parse(localStorage.getItem('ls_ai_providers') || '[]');
+  custom.push({ ...p, active: true });
+  localStorage.setItem('ls_ai_providers', JSON.stringify(custom));
+  _renderProviderList();
+  // clear inputs
+  ['ollamaUrl','ollamaModel','customName','customUrl','customKey','customModel'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+}
+
+function removeProvider(customIndex) {
+  const custom = JSON.parse(localStorage.getItem('ls_ai_providers') || '[]');
+  custom.splice(customIndex, 1);
+  localStorage.setItem('ls_ai_providers', JSON.stringify(custom));
+  _renderProviderList();
+}
+
+async function testAIProvider(url, key, model) {
+  const btn = document.getElementById('testProviderBtn');
+  const out = document.getElementById('testProviderResult');
+  if (btn) btn.disabled = true;
+  if (out) out.textContent = 'â³ Testeâ€¦';
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, messages: [{ role:'user', content:'Hallo' }], max_tokens: 10 })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const reply = data.choices?.[0]?.message?.content;
+    if (out) out.textContent = reply ? `âœ… Verbunden! Antwort: "${reply}"` : 'âœ… Verbunden (leere Antwort)';
+  } catch(e) {
+    if (out) out.textContent = `âŒ Fehler: ${e.message}`;
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function testCustomProvider() {
+  const url   = (document.getElementById('customUrl')?.value  || '').trim();
+  const key   = (document.getElementById('customKey')?.value  || '').trim();
+  const model = (document.getElementById('customModel')?.value|| '').trim();
+  if (!url || !key || !model) { alert('Bitte URL, API-Key und Modell fÃ¼r den Test ausfÃ¼llen.'); return; }
+  testAIProvider(url, key, model);
+}
+
+// â”€â”€ INIT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+document.addEventListener('DOMContentLoaded', () => {
+  checkOnboarding();
+});
 
 // ============================================================
 // EVENT LISTENERS
@@ -1997,10 +2858,492 @@ document.getElementById('sidebarToggle').addEventListener('click', openSidebar);
 document.getElementById('sidebarClose').addEventListener('click', closeSidebar);
 document.getElementById('sidebarOverlay').addEventListener('click', closeSidebar);
 
-// Keyboard: Escape closes sidebar and chat
+// Keyboard: Escape closes sidebar, chat and settings
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeSidebar(); _chatClose(); }
+  if (e.key === 'Escape') { closeSidebar(); _chatClose(); closeAISettings(); }
 });
+
+// ============================================================
+// EXPERIMENT
+// ============================================================
+
+let _sim = null;
+
+function openExperiment(expId) {
+  const ex = document.getElementById('expModal');
+  if (ex) { ex.remove(); if (_sim) _sim.stop(); }
+
+  const modal = document.createElement('div');
+  modal.id = 'expModal';
+  modal.className = 'sim-overlay';
+
+  if (expId === 'fadenstrahlrohr') {
+    modal.innerHTML = `
+      <div class="sim-box">
+        <button class="sim-x" onclick="closeExperiment()">âœ•</button>
+        <h3 class="sim-h3">âš›ï¸ Elektronenstrahl im Magnetfeld</h3>
+        <canvas id="fstCanvas" width="460" height="260" style="width:100%;border-radius:8px;display:block"></canvas>
+        <div style="padding:10px 16px 4px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div style="background:#f3f0ff;border-radius:8px;padding:8px 10px">
+            <div style="font-size:.82rem;color:#6D28D9;font-weight:700;margin-bottom:4px">âš¡ Spannung U<sub>B</sub> â€” mehr â†’ Kreis GRÃ–SSER</div>
+            <input type="range" id="fstUSlider" min="100" max="400" step="25" value="200"
+              oninput="_fstSetU(this.value)" style="width:100%;accent-color:#7C3AED">
+            <div style="text-align:center;font-weight:800;font-size:1rem;color:#5B21B6"><span id="fstULabel">200</span> V</div>
+          </div>
+          <div style="background:#f0f9ff;border-radius:8px;padding:8px 10px">
+            <div style="font-size:.82rem;color:#0369A1;font-weight:700;margin-bottom:4px">ðŸ”Œ Strom I<sub>S</sub> â€” mehr â†’ Kreis KLEINER</div>
+            <input type="range" id="fstISlider" min="5" max="20" step="1" value="15"
+              oninput="_fstSetI(this.value)" style="width:100%;accent-color:#0EA5E9">
+            <div style="text-align:center;font-weight:800;font-size:1rem;color:#0369A1"><span id="fstILabel">1,5</span> A</div>
+          </div>
+        </div>
+        <div class="sim-info-row" style="margin-top:8px">
+          <span>r = <b id="fstRVal">4,1</b> cm</span>
+          <span>2r = <b id="fst2RVal">8,2</b> cm</span>
+          <span>e/m â‰ˆ <b id="fstEmVal">1,76</b> Ã— 10Â¹Â¹ C/kg</span>
+        </div>
+        <div id="fstResult" class="sim-result" style="margin:6px 14px 8px;display:none"></div>
+        <p class="sim-hint" id="fstUVal" style="text-align:center;margin:2px 0 6px">Formel: <b>e/m = 2U / (BÂ² Â· rÂ²)</b> Â· Literaturwert: <b>1,76 Ã— 10Â¹Â¹ C/kg</b></p>
+      </div>`;
+    document.body.appendChild(modal);
+    _sim = _fstCreate();
+  } else {
+    modal.innerHTML = `
+      <div class="sim-box">
+        <button class="sim-x" onclick="closeExperiment()">âœ•</button>
+        <h3 class="sim-h3">ðŸ§ª Experiment: GleichfÃ¶rmige Bewegung</h3>
+        <canvas id="simRoad" class="sim-road-canvas" width="700" height="130"></canvas>
+        <div class="sim-info-row">
+          <span>â± Zeit: <b id="simT">0,0 s</b></span>
+          <span>ðŸ“ Weg: <b id="simS">0 m</b></span>
+          <span>Tempo:
+            <select id="simV" onchange="_simSetV(this.value)">
+              <option value="5">5 m/s (langsam)</option>
+              <option value="10" selected>10 m/s (mittel)</option>
+              <option value="20">20 m/s (schnell)</option>
+            </select>
+          </span>
+        </div>
+        <div class="sim-btn-row">
+          <button class="sim-btn primary" id="simPlayBtn" onclick="_simToggle()">â–¶ Start</button>
+          <button class="sim-btn" onclick="_simMeasure()">ðŸ“ Jetzt messen</button>
+          <button class="sim-btn" onclick="_simReset()">â†º Neu starten</button>
+        </div>
+        <p class="sim-hint">DrÃ¼cke mehrmals auf <b>Jetzt messen</b> wÃ¤hrend das Auto fÃ¤hrt â€“ die Punkte erscheinen im Diagramm. Klicke dann auf <b>zwei Punkte</b> um die Steigung (= Geschwindigkeit) zu berechnen!</p>
+        <div class="sim-diagram-label">s-t Diagramm <span style="font-weight:400;font-size:.82em;color:#64748B">(zwei Punkte anklicken â†’ Steigung = Geschwindigkeit)</span></div>
+        <canvas id="simChart" class="sim-chart-canvas" width="680" height="290"></canvas>
+        <div id="simResult" class="sim-result"></div>
+        <table class="sim-table" id="simTableWrap" style="display:none">
+          <thead><tr><th>Punkt</th><th>Zeit t (s)</th><th>Weg s (m)</th></tr></thead>
+          <tbody id="simTbody"></tbody>
+        </table>
+      </div>`;
+    document.body.appendChild(modal);
+    _sim = _simCreate();
+    document.getElementById('simChart').addEventListener('click', function(e) {
+      if (!_sim) return;
+      const r = this.getBoundingClientRect();
+      _sim.handleClick(
+        (e.clientX - r.left) * (this.width / r.width),
+        (e.clientY - r.top)  * (this.height / r.height)
+      );
+    });
+  }
+}
+
+function closeExperiment() {
+  if (_sim) { _sim.stop(); _sim = null; }
+  const m = document.getElementById('expModal');
+  if (m) m.remove();
+}
+
+function _simSetV(v) { if (_sim) _sim.setV(parseFloat(v)); }
+function _simToggle()  { if (_sim) _sim.toggle(); }
+function _simMeasure() { if (_sim) _sim.measure(); }
+function _simReset()   { if (_sim) _sim.reset(); }
+
+function _simCreate() {
+  const MAX_S = 100;
+  let st = { running:false, t:0, s:0, v:10, meas:[], sel:[], raf:null, last:null };
+
+  function stop() {
+    if (st.raf) cancelAnimationFrame(st.raf);
+    st.running = false; st.last = null;
+  }
+
+  function setV(v) { st.v = v; }
+
+  function toggle() {
+    if (st.running) {
+      stop();
+      const b = document.getElementById('simPlayBtn');
+      if (b) b.textContent = 'â–¶ Weiter';
+    } else if (st.s < MAX_S) {
+      st.running = true;
+      const b = document.getElementById('simPlayBtn');
+      if (b) b.textContent = 'â¸ Pause';
+      function loop(ts) {
+        if (!st.running) return;
+        if (st.last !== null) {
+          st.t += Math.min((ts - st.last) / 1000, 0.05);
+          st.s = Math.min(st.v * st.t, MAX_S);
+        }
+        st.last = ts;
+        const tEl = document.getElementById('simT');
+        const sEl = document.getElementById('simS');
+        if (tEl) tEl.textContent = st.t.toFixed(1).replace('.',',') + ' s';
+        if (sEl) sEl.textContent = st.s.toFixed(1).replace('.',',') + ' m';
+        drawRoad(); drawChart();
+        if (st.s < MAX_S) st.raf = requestAnimationFrame(loop);
+        else { stop(); if (b) b.textContent = 'âœ… Am Ziel'; }
+      }
+      st.raf = requestAnimationFrame(loop);
+    }
+  }
+
+  function measure() {
+    st.meas.push({ t: parseFloat(st.t.toFixed(1)), s: parseFloat(st.s.toFixed(1)) });
+    st.sel = [];
+    const res = document.getElementById('simResult');
+    if (res) res.innerHTML = '';
+    drawChart(); updateTable();
+  }
+
+  function reset() {
+    stop();
+    const v = parseFloat((document.getElementById('simV') || {value:'10'}).value);
+    st = { running:false, t:0, s:0, v, meas:[], sel:[], raf:null, last:null };
+    const b = document.getElementById('simPlayBtn');
+    if (b) { b.textContent = 'â–¶ Start'; b.disabled = false; }
+    const tEl = document.getElementById('simT'); if (tEl) tEl.textContent = '0,0 s';
+    const sEl = document.getElementById('simS'); if (sEl) sEl.textContent = '0 m';
+    const res = document.getElementById('simResult'); if (res) res.innerHTML = '';
+    const tb = document.getElementById('simTbody'); if (tb) tb.innerHTML = '';
+    const tw = document.getElementById('simTableWrap'); if (tw) tw.style.display = 'none';
+    drawRoad(); drawChart();
+  }
+
+  function handleClick(mx, my) {
+    const PAD = {l:58,r:20,t:22,b:48}, cW=680, cH=290;
+    const gW = cW-PAD.l-PAD.r, gH = cH-PAD.t-PAD.b;
+    const maxT = Math.max(10, (MAX_S/st.v)+1);
+    const tx = t => PAD.l + (t/maxT)*gW;
+    const sy = s => PAD.t + gH - (s/MAX_S)*gH;
+    let closest = -1, minD = 22;
+    st.meas.forEach((m,i) => {
+      const d = Math.hypot(tx(m.t)-mx, sy(m.s)-my);
+      if (d < minD) { minD = d; closest = i; }
+    });
+    if (closest >= 0) {
+      if (st.sel.includes(closest)) st.sel = st.sel.filter(i=>i!==closest);
+      else if (st.sel.length < 2) st.sel.push(closest);
+      else st.sel = [closest];
+      drawChart();
+    }
+  }
+
+  function drawRoad() {
+    const c = document.getElementById('simRoad'); if (!c) return;
+    const ctx = c.getContext('2d'), W = c.width, H = c.height;
+    ctx.fillStyle='#C9E8F5'; ctx.fillRect(0,0,W,H*0.55);
+    ctx.fillStyle='#9DC88D'; ctx.fillRect(0,H*0.55,W,H*0.18);
+    ctx.fillStyle='#6B6B6B'; ctx.fillRect(0,H*0.70,W,H*0.30);
+    ctx.fillStyle='#FFF'; ctx.fillRect(0,H*0.70,W,3); ctx.fillRect(0,H-3,W,3);
+    ctx.strokeStyle='#FFD700'; ctx.setLineDash([22,16]); ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.moveTo(0,H*0.845); ctx.lineTo(W,H*0.845); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font='10px Nunito,sans-serif'; ctx.textAlign='center';
+    for (let m=0; m<=MAX_S; m+=20) {
+      const x=(m/MAX_S)*W;
+      ctx.fillStyle='#BBB'; ctx.fillRect(x-1,H*0.70,2,7);
+      ctx.fillStyle='#444'; ctx.fillText(m+' m',x,H*0.67);
+    }
+    const carX = Math.min((st.s/MAX_S)*(W-72), W-72);
+    const bY = H*0.72;
+    ctx.fillStyle='#E74C3C';
+    ctx.beginPath();
+    ctx.moveTo(carX+4,bY+24); ctx.lineTo(carX+4,bY+7);
+    ctx.lineTo(carX+14,bY+7); ctx.lineTo(carX+20,bY);
+    ctx.lineTo(carX+50,bY); ctx.lineTo(carX+56,bY+7);
+    ctx.lineTo(carX+68,bY+7); ctx.lineTo(carX+68,bY+24);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#C0392B'; ctx.fillRect(carX+21,bY,29,8);
+    ctx.fillStyle='#AED6F1';
+    ctx.fillRect(carX+22,bY+1,11,7); ctx.fillRect(carX+36,bY+1,11,7);
+    [carX+14, carX+54].forEach(wx => {
+      ctx.fillStyle='#222'; ctx.beginPath(); ctx.arc(wx,bY+25,8,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#888'; ctx.beginPath(); ctx.arc(wx,bY+25,4,0,Math.PI*2); ctx.fill();
+    });
+    const cx = carX+36;
+    ctx.strokeStyle='rgba(231,76,60,.5)'; ctx.setLineDash([4,4]); ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(cx,H*0.70); ctx.lineTo(cx,H); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  function drawChart() {
+    const c = document.getElementById('simChart'); if (!c) return;
+    const ctx = c.getContext('2d'), cW=c.width, cH=c.height;
+    const P = {l:58,r:20,t:22,b:48};
+    const gW=cW-P.l-P.r, gH=cH-P.t-P.b;
+    const maxT = Math.max(10, (MAX_S/st.v)+1);
+    const tx = t => P.l+(t/maxT)*gW;
+    const sy = s => P.t+gH-(s/MAX_S)*gH;
+    ctx.clearRect(0,0,cW,cH);
+    ctx.strokeStyle='#F0F0F0'; ctx.lineWidth=1;
+    for (let i=1;i<=5;i++) {
+      const y=P.t+(i/5)*gH; ctx.beginPath(); ctx.moveTo(P.l,y); ctx.lineTo(P.l+gW,y); ctx.stroke();
+      const x=P.l+(i/5)*gW; ctx.beginPath(); ctx.moveTo(x,P.t); ctx.lineTo(x,P.t+gH); ctx.stroke();
+    }
+    ctx.strokeStyle='rgba(59,130,246,.18)'; ctx.lineWidth=2; ctx.setLineDash([7,5]);
+    ctx.beginPath(); ctx.moveTo(tx(0),sy(0)); ctx.lineTo(tx(MAX_S/st.v),sy(MAX_S)); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.strokeStyle='#333'; ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.moveTo(P.l,P.t); ctx.lineTo(P.l,P.t+gH); ctx.lineTo(P.l+gW,P.t+gH); ctx.stroke();
+    ctx.fillStyle='#333';
+    ctx.beginPath(); ctx.moveTo(P.l+gW,P.t+gH); ctx.lineTo(P.l+gW+8,P.t+gH-4); ctx.lineTo(P.l+gW+8,P.t+gH+4); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(P.l,P.t); ctx.lineTo(P.l-4,P.t+9); ctx.lineTo(P.l+4,P.t+9); ctx.fill();
+    ctx.font='bold 13px Nunito,sans-serif'; ctx.fillStyle='#333'; ctx.textAlign='center';
+    ctx.fillText('t in s', P.l+gW/2, cH-4);
+    ctx.save(); ctx.translate(14,P.t+gH/2); ctx.rotate(-Math.PI/2);
+    ctx.fillText('s in m',0,0); ctx.restore();
+    ctx.font='11px Nunito,sans-serif'; ctx.fillStyle='#666';
+    for (let i=0;i<=5;i++) {
+      ctx.textAlign='center'; ctx.fillText(((i/5)*maxT).toFixed(0), P.l+(i/5)*gW, P.t+gH+16);
+      ctx.textAlign='right';  ctx.fillText(((i/5)*MAX_S).toFixed(0), P.l-6, sy((i/5)*MAX_S)+4);
+    }
+    if (st.t > 0.05) {
+      ctx.fillStyle='rgba(231,76,60,.2)';
+      ctx.beginPath(); ctx.arc(tx(st.t),sy(st.s),5,0,Math.PI*2); ctx.fill();
+    }
+    if (st.sel.length === 2) {
+      const [i1,i2] = [...st.sel].sort((a,b)=>st.meas[a].t-st.meas[b].t);
+      const p1=st.meas[i1], p2=st.meas[i2];
+      const dt=parseFloat((p2.t-p1.t).toFixed(1));
+      const ds=parseFloat((p2.s-p1.s).toFixed(1));
+      const v = dt>0 ? (ds/dt).toFixed(1) : 'â€“';
+      ctx.strokeStyle='#F97316'; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.moveTo(tx(p1.t),sy(p1.s)); ctx.lineTo(tx(p2.t),sy(p2.s)); ctx.stroke();
+      ctx.strokeStyle='#EF4444'; ctx.lineWidth=1.5; ctx.setLineDash([4,3]);
+      ctx.beginPath();
+      ctx.moveTo(tx(p1.t),sy(p1.s)); ctx.lineTo(tx(p2.t),sy(p1.s)); ctx.lineTo(tx(p2.t),sy(p2.s));
+      ctx.stroke(); ctx.setLineDash([]);
+      ctx.font='bold 11px Nunito,sans-serif'; ctx.fillStyle='#DC2626';
+      ctx.textAlign='center'; ctx.fillText('Î”t = '+dt.toFixed(1)+' s', tx((p1.t+p2.t)/2), sy(p1.s)+18);
+      ctx.textAlign='right';  ctx.fillText('Î”s = '+ds.toFixed(0)+' m', tx(p2.t)-4, sy((p1.s+p2.s)/2)-6);
+      const res = document.getElementById('simResult');
+      if (res) res.innerHTML = 'Steigung = Î”s Ã· Î”t = <b>'+ds.toFixed(0)+' m</b> Ã· <b>'+dt.toFixed(1)+' s</b> = <b class="sim-v-result">'+v+' m/s</b> &nbsp;â†’&nbsp; Das ist die Geschwindigkeit <b>v</b>!';
+    }
+    st.meas.forEach((m,idx) => {
+      const sel = st.sel.includes(idx);
+      ctx.fillStyle = sel ? '#F97316' : '#16A34A';
+      ctx.strokeStyle = sel ? '#C2410C' : '#15803D';
+      ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(tx(m.t),sy(m.s),sel?9:7,0,Math.PI*2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle='#fff'; ctx.font='bold 9px Nunito,sans-serif'; ctx.textAlign='center';
+      ctx.fillText(idx+1, tx(m.t), sy(m.s)+3);
+    });
+  }
+
+  function updateTable() {
+    const tb = document.getElementById('simTbody');
+    const tw = document.getElementById('simTableWrap');
+    if (!tb||!tw) return;
+    if (st.meas.length>0) tw.style.display='table';
+    tb.innerHTML = st.meas.map((m,i)=>
+      `<tr><td>P${i+1}</td><td>${m.t.toFixed(1).replace('.',',')}</td><td>${m.s.toFixed(1).replace('.',',')}</td></tr>`
+    ).join('');
+  }
+
+  drawRoad(); drawChart();
+  return { stop, toggle, measure, reset, handleClick, setV };
+}
+
+// ============================================================
+// FADENSTRAHLROHR SIMULATION
+// ============================================================
+function _fstSetU(val) { if (_sim) _sim.setU(parseFloat(val)); }
+function _fstSetI(val) { if (_sim) _sim.setI(parseFloat(val) / 10); }
+
+function _fstCreate() {
+  const canvas = document.getElementById('fstCanvas');
+  if (!canvas) return { stop:()=>{} };
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height; // 460 Ã— 260
+
+  const e_c = 1.6e-19, me = 9.11e-31;
+  const kB  = 7.8e-4;
+  const kr  = Math.sqrt(2 * me / e_c);
+  const SCALE = 2500;
+
+  let U = 200, I = 1.5;
+  let animId = null, dotAngle = 0;
+
+  // Beam circle sits in upper area; ruler in bottom strip
+  const CX = Math.round(W * 0.50);
+  const CY = Math.round(H * 0.43);
+  const MAX_R = Math.round(H * 0.38); // max beam radius in px
+
+  function calcPhysics() {
+    const B      = kB * I;
+    const r_real = kr * Math.sqrt(U) / B;
+    const r_px   = Math.min(r_real * SCALE, MAX_R);
+    const em     = 2 * U / (B * B * r_real * r_real);
+    return { r_real, r_px, em };
+  }
+
+  function draw() {
+    const { r_real, r_px, em } = calcPhysics();
+    ctx.clearRect(0, 0, W, H);
+
+    // â”€â”€ clean white background â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+
+    // â”€â”€ light grid (graph-paper feel) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    ctx.strokeStyle = 'rgba(200,220,255,0.5)';
+    ctx.lineWidth = 0.5;
+    for (let x = 0; x < W; x += 20) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+    for (let y = 0; y < H; y += 20) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+
+    // â”€â”€ electron gun (left side, pointing right) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    const GX = 28, GY = CY;
+    ctx.fillStyle = '#555';
+    ctx.fillRect(GX - 18, GY - 8, 18, 16);
+    ctx.fillStyle = '#ffcc00';
+    ctx.beginPath();
+    ctx.arc(GX - 9, GY, 4, 0, 2 * Math.PI);
+    ctx.fill();
+    // arrow from gun
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(GX, GY);
+    ctx.lineTo(GX + 12, GY);
+    ctx.stroke();
+    ctx.fillStyle = '#888';
+    ctx.beginPath();
+    ctx.moveTo(GX + 14, GY);
+    ctx.lineTo(GX + 8, GY - 4);
+    ctx.lineTo(GX + 8, GY + 4);
+    ctx.fill();
+    // gun label
+    ctx.fillStyle = '#555';
+    ctx.font = '9px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Kanone', GX - 9, GY + 18);
+
+    // â”€â”€ glowing beam circle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(CX, CY, r_px, 0, 2 * Math.PI);
+    ctx.strokeStyle = '#00bb55';
+    ctx.lineWidth = 3.5;
+    ctx.shadowColor = '#00ee77';
+    ctx.shadowBlur = 12;
+    ctx.stroke();
+    ctx.restore();
+
+    // â”€â”€ center cross â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(CX - r_px - 10, CY); ctx.lineTo(CX + r_px + 10, CY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(CX, CY - r_px - 10); ctx.lineTo(CX, CY + r_px + 10); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // â”€â”€ radius arrow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    ctx.strokeStyle = '#e06000';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(CX, CY);
+    ctx.lineTo(CX + r_px, CY);
+    ctx.stroke();
+    ctx.fillStyle = '#e06000';
+    ctx.beginPath();
+    ctx.moveTo(CX + r_px + 1, CY);
+    ctx.lineTo(CX + r_px - 7, CY - 4);
+    ctx.lineTo(CX + r_px - 7, CY + 4);
+    ctx.fill();
+    ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('r = ' + (r_real * 100).toFixed(1).replace('.', ',') + ' cm',
+      CX + r_px / 2, CY - 8);
+
+    // â”€â”€ moving electron (white dot with glow) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    dotAngle = (dotAngle + 0.04) % (2 * Math.PI);
+    const ex = CX + r_px * Math.cos(dotAngle);
+    const ey = CY + r_px * Math.sin(dotAngle);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(ex, ey, 6, 0, 2 * Math.PI);
+    ctx.fillStyle = '#2255ff';
+    ctx.shadowColor = '#88aaff';
+    ctx.shadowBlur = 14;
+    ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 8px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('eâ»', ex, ey + 3);
+
+    // â”€â”€ ruler strip (bottom) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    const RY = H - 30;
+    const PX_CM = SCALE * 0.01; // 25 px = 1 cm
+    const RL = CX - MAX_R, RW = MAX_R * 2;
+
+    ctx.fillStyle = '#f8f8f8';
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 1;
+    ctx.fillRect(RL, RY, RW, 22);
+    ctx.strokeRect(RL, RY, RW, 22);
+
+    ctx.strokeStyle = '#444';
+    ctx.fillStyle = '#444';
+    ctx.font = '9px sans-serif';
+    ctx.textAlign = 'center';
+    const cmMax = Math.floor(RW / PX_CM);
+    for (let cm = 0; cm <= cmMax; cm++) {
+      const x = RL + cm * PX_CM;
+      const tk = (cm % 5 === 0) ? 11 : (cm % 2 === 0 ? 6 : 3);
+      ctx.beginPath(); ctx.moveTo(x, RY); ctx.lineTo(x, RY + tk); ctx.stroke();
+      if (cm % 2 === 0 && cm > 0) ctx.fillText(cm, x, RY + 19);
+    }
+    // highlight 2r on ruler
+    const twoR_px = r_real * 200 * PX_CM;
+    ctx.fillStyle = 'rgba(0,160,80,0.20)';
+    ctx.fillRect(RL, RY + 1, Math.min(twoR_px, RW - 2), 10);
+    ctx.strokeStyle = '#00994d';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(RL, RY + 6); ctx.lineTo(RL + twoR_px, RY + 6); ctx.stroke();
+    ctx.fillStyle = '#007a3d';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('â† 2r = ' + (r_real * 200).toFixed(1).replace('.', ',') + ' cm', RL + 2, RY - 3);
+
+    // â”€â”€ update HTML â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    const rD  = (r_real * 100).toFixed(1).replace('.', ',');
+    const r2D = (r_real * 200).toFixed(1).replace('.', ',');
+    const emD = (em / 1e11).toFixed(2).replace('.', ',');
+    document.getElementById('fstRVal').textContent  = rD;
+    document.getElementById('fst2RVal').textContent = r2D;
+    document.getElementById('fstEmVal').textContent = emD;
+
+    animId = requestAnimationFrame(draw);
+  }
+
+  function stop()    { if (animId) cancelAnimationFrame(animId); }
+  function setU(val) {
+    U = parseFloat(val);
+    document.getElementById('fstULabel').textContent = U;
+  }
+  function setI(val) {
+    I = parseFloat(val) / 10;
+    document.getElementById('fstILabel').textContent = I.toFixed(1).replace('.', ',');
+  }
+
+  draw();
+  return { stop, setU, setI };
+}
 
 // ============================================================
 // INIT
@@ -2014,113 +3357,17 @@ document.addEventListener('DOMContentLoaded', () => {
 // ERKLÃ„RVIDEO PLAYER  â€“  TikTok-Style animierte ErklÃ¤rvideos
 // ============================================================
 
-// ---- Moderner 3D-Tutor: Mr. Lala ----
-function _evCharHTML(mode) {
-  const cls = 'ev-char-wrap'
-    + (mode === 'talking'     ? ' ev-char-talking'     : '')
-    + (mode === 'pointing'    ? ' ev-char-pointing'    : '')
-    + (mode === 'celebrating' ? ' ev-char-celebrating' : '');
-  return `<div class="${cls}"><svg class="ev-char-svg" viewBox="0 0 180 295" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <radialGradient id="evSk" cx="38%" cy="32%" r="68%">
-      <stop offset="0%" stop-color="#FFD5A8"/><stop offset="68%" stop-color="#EAAA70"/><stop offset="100%" stop-color="#C07040"/>
-    </radialGradient>
-    <linearGradient id="evHd" x1="0%" y1="0%" x2="75%" y2="100%">
-      <stop offset="0%" stop-color="#9333EA"/><stop offset="100%" stop-color="#5B21B6"/>
-    </linearGradient>
-    <linearGradient id="evPt" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#1E1B4B"/><stop offset="100%" stop-color="#312E81"/>
-    </linearGradient>
-    <radialGradient id="evHr" cx="50%" cy="20%" r="70%">
-      <stop offset="0%" stop-color="#3D2400"/><stop offset="100%" stop-color="#150800"/>
-    </radialGradient>
-    <filter id="evSdw" x="-25%" y="-15%" width="150%" height="140%">
-      <feDropShadow dx="2" dy="4" stdDeviation="4" flood-color="rgba(0,0,0,.4)"/>
-    </filter>
-  </defs>
-  <ellipse cx="90" cy="291" rx="42" ry="6" fill="rgba(0,0,0,.2)"/>
-  <path d="M75,232 Q72,260 70,282" stroke="url(#evPt)" stroke-width="23" fill="none" stroke-linecap="round"/>
-  <path d="M105,232 Q108,260 110,282" stroke="url(#evPt)" stroke-width="23" fill="none" stroke-linecap="round"/>
-  <path d="M58,279 Q70,287 83,282 Q76,292 57,288 Z" fill="#111827"/>
-  <path d="M97,282 Q110,287 122,279 Q122,288 102,292 Z" fill="#111827"/>
-  <path d="M44,148 C37,172 36,212 38,234 L142,234 C144,212 143,172 136,148 C130,133 116,126 107,124 L90,130 L73,124 C64,126 50,133 44,148Z" fill="url(#evHd)" filter="url(#evSdw)"/>
-  <path d="M44,148 C37,172 36,212 38,234 L55,234 C53,212 54,172 56,150 Z" fill="rgba(0,0,0,.18)"/>
-  <rect x="66" y="190" width="48" height="26" rx="6" fill="rgba(0,0,0,.15)" stroke="rgba(255,255,255,.07)" stroke-width="1"/>
-  <text x="90" y="172" font-size="15" text-anchor="middle" fill="rgba(255,255,255,.22)">â­</text>
-  <rect x="63" y="145" width="54" height="16" rx="8" fill="rgba(255,255,255,.1)" stroke="rgba(255,255,255,.18)" stroke-width="1"/>
-  <text x="90" y="157" font-family="Nunito,sans-serif" font-size="7" font-weight="700" fill="rgba(255,255,255,.7)" text-anchor="middle">Mr. Lala â­</text>
-  <g class="ev-arm-default">
-    <path d="M44,150 C32,169 24,197 26,222" stroke="#7C3AED" stroke-width="21" fill="none" stroke-linecap="round"/>
-    <ellipse cx="28" cy="225" rx="13" ry="10" fill="url(#evSk)"/>
-    <path d="M136,150 C150,166 160,184 162,207" stroke="#7C3AED" stroke-width="21" fill="none" stroke-linecap="round"/>
-    <ellipse cx="163" cy="211" rx="13" ry="10" fill="url(#evSk)"/>
-  </g>
-  <g class="ev-arm-pointing" style="display:none">
-    <path d="M44,150 C32,169 24,197 26,222" stroke="#7C3AED" stroke-width="21" fill="none" stroke-linecap="round"/>
-    <ellipse cx="28" cy="225" rx="13" ry="10" fill="url(#evSk)"/>
-    <path d="M136,150 C147,132 158,114 166,96" stroke="#7C3AED" stroke-width="21" fill="none" stroke-linecap="round"/>
-    <ellipse cx="167" cy="93" rx="13" ry="10" fill="url(#evSk)"/>
-    <line x1="168" y1="87" x2="178" y2="72" stroke="url(#evSk)" stroke-width="8" stroke-linecap="round"/>
-  </g>
-  <g class="ev-arm-celebrate" style="display:none">
-    <path d="M44,150 C30,130 18,112 20,90" stroke="#7C3AED" stroke-width="21" fill="none" stroke-linecap="round"/>
-    <ellipse cx="21" cy="87" rx="13" ry="10" fill="url(#evSk)"/>
-    <path d="M136,150 C150,130 162,112 160,90" stroke="#7C3AED" stroke-width="21" fill="none" stroke-linecap="round"/>
-    <ellipse cx="159" cy="87" rx="13" ry="10" fill="url(#evSk)"/>
-  </g>
-  <rect x="83" y="122" width="14" height="20" rx="5" fill="url(#evSk)"/>
-  <ellipse cx="90" cy="79" rx="49" ry="52" fill="url(#evSk)" filter="url(#evSdw)"/>
-  <path d="M41,69 C43,28 64,12 90,12 C116,12 137,28 139,69 C133,40 114,32 90,32 C66,32 47,40 41,69Z" fill="url(#evHr)"/>
-  <path d="M66,24 C74,14 82,12 90,14 C98,12 106,14 112,22" stroke="#3A2200" stroke-width="8" fill="none" stroke-linecap="round"/>
-  <ellipse cx="41" cy="82" rx="8" ry="11" fill="url(#evSk)"/>
-  <ellipse cx="41" cy="82" rx="4" ry="7" fill="#D08050" opacity=".45"/>
-  <ellipse cx="139" cy="82" rx="8" ry="11" fill="url(#evSk)"/>
-  <ellipse cx="139" cy="82" rx="4" ry="7" fill="#D08050" opacity=".45"/>
-  <path d="M57,60 Q69,55 79,58" stroke="#3A2000" stroke-width="3.5" fill="none" stroke-linecap="round"/>
-  <path d="M101,58 Q111,55 123,60" stroke="#3A2000" stroke-width="3.5" fill="none" stroke-linecap="round"/>
-  <ellipse cx="68" cy="76" rx="12" ry="13" fill="white"/>
-  <ellipse cx="68" cy="76" rx="8" ry="8.5" fill="#1D4ED8"/>
-  <ellipse cx="68" cy="76" rx="4.5" ry="4.5" fill="#0F172A"/>
-  <ellipse cx="65" cy="73" rx="2.5" ry="2.5" fill="white"/>
-  <ellipse class="ev-lid-l" cx="68" cy="76" rx="13" ry="1" fill="url(#evSk)"/>
-  <ellipse cx="112" cy="76" rx="12" ry="13" fill="white"/>
-  <ellipse cx="112" cy="76" rx="8" ry="8.5" fill="#1D4ED8"/>
-  <ellipse cx="112" cy="76" rx="4.5" ry="4.5" fill="#0F172A"/>
-  <ellipse cx="109" cy="73" rx="2.5" ry="2.5" fill="white"/>
-  <ellipse class="ev-lid-r" cx="112" cy="76" rx="13" ry="1" fill="url(#evSk)"/>
-  <rect x="53" y="64" width="30" height="24" rx="8" fill="rgba(100,140,255,.04)" stroke="rgba(180,200,255,.68)" stroke-width="1.8"/>
-  <rect x="87" y="64" width="30" height="24" rx="8" fill="rgba(100,140,255,.04)" stroke="rgba(180,200,255,.68)" stroke-width="1.8"/>
-  <line x1="83" y1="76" x2="87" y2="76" stroke="rgba(180,200,255,.68)" stroke-width="1.8"/>
-  <line x1="53" y1="76" x2="44" y2="74" stroke="rgba(180,200,255,.68)" stroke-width="1.8"/>
-  <line x1="117" y1="76" x2="126" y2="74" stroke="rgba(180,200,255,.68)" stroke-width="1.8"/>
-  <path d="M58,68 Q65,66 69,70" stroke="rgba(255,255,255,.35)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-  <path d="M92,68 Q99,66 103,70" stroke="rgba(255,255,255,.35)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-  <path d="M86,92 Q90,102 94,92" stroke="#C07040" stroke-width="2" fill="none" stroke-linecap="round"/>
-  <circle cx="85" cy="96" r="2" fill="#D08050" opacity=".3"/>
-  <circle cx="95" cy="96" r="2" fill="#D08050" opacity=".3"/>
-  <ellipse cx="54" cy="95" rx="11" ry="6" fill="#FF8B94" opacity=".15"/>
-  <ellipse cx="126" cy="95" rx="11" ry="6" fill="#FF8B94" opacity=".15"/>
-  <g class="ev-char-mouth">
-    <path class="ev-mouth-smile" d="M74,112 Q90,124 106,112" stroke="#C06848" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-    <g class="ev-mouth-talk">
-      <path d="M74,112 Q90,128 106,112 L103,120 Q90,133 77,120 Z" fill="#8B1F00"/>
-      <rect x="78" y="112" width="24" height="5" rx="2.5" fill="white" opacity=".9"/>
-    </g>
-  </g>
-</svg></div>`;
-}
-
 const EV_SCENES = {
   'EinfÃ¼hrung in BrÃ¼che': [
-    // SZENE 1 â€“ Dramatischer Hook (kein Charakter)
+    // SZENE 1 â€“ Hook (3s)
     {
-      dur: 3500,
-      bg: 'linear-gradient(160deg,#1a0035 0%,#0e0820 100%)',
-      build(stage) {
+      dur: 3000,
+      bg: 'linear-gradient(160deg, #1a0035 0%, #0e0820 100%)',
+      build: (stage) => {
         stage.innerHTML = `
           <div class="ev-bg-label" style="top:-10%;left:-5%">Â½</div>
-          <div style="margin-bottom:14px;animation:evBounceIn .4s cubic-bezier(.36,.07,.19,.97)">
-            <svg viewBox="0 0 140 140" width="120" height="120">
+          <div style="margin-bottom:12px; animation: evBounceIn .4s cubic-bezier(.36,.07,.19,.97)">
+            <svg viewBox="0 0 140 140" width="130" height="130">
               <circle cx="70" cy="70" r="60" fill="#c0392b" stroke="#922b21" stroke-width="3"/>
               <path d="M70,70 L70,10 A60,60 0 0,1 130,70 Z" fill="#e74c3c"/>
               <path d="M70,70 L130,70 A60,60 0 0,1 70,130 Z" fill="#c0392b" opacity=".8"/>
@@ -2133,21 +3380,24 @@ const EV_SCENES = {
             </svg>
           </div>
           <div class="ev-hook-title">BRÃœCHE</div>
-          <div class="ev-hook-sub">Wie kann eine halbe Pizza eine Zahl sein?</div>`;
+          <div class="ev-hook-sub">Wie kann eine halbe Pizza eine Zahl sein?</div>
+        `;
       }
     },
-    // SZENE 2 â€“ Mr. Lala stellt sich vor (Charakter erscheint)
+
+    // SZENE 2 â€“ Problem (3s)
     {
-      dur: 4000,
-      bg: 'linear-gradient(160deg,#1a0035 0%,#0e0820 100%)',
-      build(stage) {
-        stage.style.justifyContent = 'flex-start';
-        stage.innerHTML = `<div class="ev-scene-split">
-          <div class="ev-split-char">${_evCharHTML('talking')}<div class="ev-char-name-lbl">Mr. Lala</div></div>
-          <div class="ev-split-content">
-            <div class="ev-speech-bubble">Hallo! Ich bin Mr. Lala â€“ heute erklÃ¤re ich dir, was BrÃ¼che sind! ðŸ•</div>
-            <div style="margin-top:14px;animation:evGlowPulse 1s infinite">
-              <svg viewBox="0 0 100 100" width="70" height="70">
+      dur: 3000,
+      bg: 'linear-gradient(160deg, #1a0035 0%, #0e0820 100%)',
+      build: (stage) => {
+        stage.innerHTML = `
+          <div style="display:flex; gap:20px; align-items:center; margin-bottom:16px; animation: evBounceIn .5s">
+            <div style="text-align:center">
+              <div style="font-size:48px">ðŸ§’</div>
+              <div style="font-family:Nunito,sans-serif;font-size:11px;color:rgba(255,255,255,.5);margin-top:4px">Kind 1</div>
+            </div>
+            <div style="animation: evGlowPulse 1s infinite">
+              <svg viewBox="0 0 100 100" width="80" height="80">
                 <circle cx="50" cy="50" r="44" fill="#c0392b" stroke="#922b21" stroke-width="2.5"/>
                 <path d="M50,50 L50,6 A44,44 0 0,1 94,50 Z" fill="#e74c3c"/>
                 <path d="M50,50 L94,50 A44,44 0 0,1 50,94 Z" fill="#c0392b" opacity=".8"/>
@@ -2155,174 +3405,206 @@ const EV_SCENES = {
                 <line x1="6" y1="50" x2="94" y2="50" stroke="#7B241C" stroke-width="2"/>
               </svg>
             </div>
+            <div style="text-align:center">
+              <div style="font-size:48px">ðŸ§’</div>
+              <div style="font-family:Nunito,sans-serif;font-size:11px;color:rgba(255,255,255,.5);margin-top:4px">Kind 2</div>
+            </div>
           </div>
-        </div>`;
+          <div class="ev-question">â€žWie schreibt man die HÃ¤lfte in Mathe?"</div>
+        `;
       }
     },
-    // SZENE 3 â€“ Was sind BrÃ¼che? (Charakter erklÃ¤rt)
+
+    // SZENE 3 â€“ Thema vorstellen (4s)
     {
-      dur: 5000,
-      bg: 'linear-gradient(160deg,#1a0035 0%,#0e0820 100%)',
-      build(stage) {
-        stage.style.justifyContent = 'flex-start';
-        stage.innerHTML = `<div class="ev-scene-split">
-          <div class="ev-split-char">${_evCharHTML('talking')}<div class="ev-char-name-lbl">Mr. Lala</div></div>
-          <div class="ev-split-content">
-            <div class="ev-speech-bubble">BrÃ¼che zeigen, wie viele Teile von etwas Ganzem gemeint sind.</div>
-            <div style="display:flex;align-items:center;gap:10px;margin-top:14px;animation:evScaleIn .5s .3s both">
-              <svg viewBox="0 0 100 100" width="65" height="65">
-                <circle cx="50" cy="50" r="44" fill="rgba(255,255,255,.1)" stroke="rgba(255,255,255,.3)" stroke-width="2"/>
-                <path d="M50,50 L50,6 A44,44 0 0,1 94,50 Z" fill="#7C3AED" style="filter:drop-shadow(0 0 8px #7C3AED)"/>
-                <line x1="50" y1="6" x2="50" y2="94" stroke="rgba(255,255,255,.4)" stroke-width="1.5"/>
-                <line x1="6" y1="50" x2="94" y2="50" stroke="rgba(255,255,255,.4)" stroke-width="1.5"/>
-              </svg>
-              <div style="display:flex;flex-direction:column;align-items:center;font-family:Poppins,sans-serif;font-size:38px;font-weight:900;gap:2px">
-                <span style="color:#FBBF24">1</span>
-                <div style="width:40px;height:4px;background:linear-gradient(90deg,#FBBF24,#F472B6);border-radius:2px"></div>
-                <span style="color:rgba(255,255,255,.85)">2</span>
-              </div>
-            </div>
-            <span class="ev-label-badge" style="animation-delay:.5s;margin-top:10px">Â½ = ein halbes StÃ¼ck</span>
+      dur: 4000,
+      bg: 'linear-gradient(160deg, #1a0035 0%, #0e0820 100%)',
+      build: (stage) => {
+        stage.innerHTML = `
+          <div class="ev-explain-text" style="margin-bottom:20px">
+            BrÃ¼che zeigen, wie viele Teile<br>von etwas Ganzem gemeint sind.
           </div>
-        </div>`;
-      }
-    },
-    // SZENE 4 â€“ ZÃ¤hler & Nenner (Charakter zeigt/erklÃ¤rt)
-    {
-      dur: 10000,
-      bg: 'linear-gradient(160deg,#1a0035 0%,#0e0820 100%)',
-      build(stage) {
-        stage.style.justifyContent = 'flex-start';
-        stage.innerHTML = `<div class="ev-scene-split">
-          <div class="ev-split-char">${_evCharHTML('pointing')}<div class="ev-char-name-lbl">Mr. Lala</div></div>
-          <div class="ev-split-content">
-            <div class="ev-speech-bubble" style="font-size:12px">Die <strong style="color:#FBBF24">obere Zahl</strong> = deine StÃ¼cke.<br>Die <strong style="color:#A78BFA">untere Zahl</strong> = alle Teile.</div>
-            <div style="margin-top:16px;position:relative;display:inline-flex;flex-direction:column;align-items:center;animation:evScaleIn .5s .3s both">
-              <span style="font-family:Poppins,sans-serif;font-size:52px;font-weight:900;color:#FBBF24;animation:evGlowPulse 1.4s infinite;text-shadow:0 0 20px #FBBF24">3</span>
-              <div style="width:54px;height:5px;background:linear-gradient(90deg,#FBBF24,#F472B6);border-radius:3px;margin:3px 0"></div>
-              <span style="font-family:Poppins,sans-serif;font-size:52px;font-weight:900;color:#A78BFA;animation:evGlowPulse 1.4s .7s infinite;text-shadow:0 0 20px #A78BFA">4</span>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:5px;margin-top:12px;animation:evFadeUp .5s .6s both">
-              <span class="ev-label-badge" style="border-color:#FBBF24;color:#FBBF24">â†‘ ZÃ¤hler</span>
-              <span class="ev-label-badge">â†“ Nenner</span>
+          <div style="display:flex; align-items:center; gap:16px; animation: evScaleIn .5s .2s both">
+            <svg viewBox="0 0 100 100" width="90" height="90">
+              <circle cx="50" cy="50" r="44" fill="rgba(255,255,255,.1)" stroke="rgba(255,255,255,.3)" stroke-width="2"/>
+              <path d="M50,50 L50,6 A44,44 0 0,1 94,50 Z" fill="#7C3AED" style="filter:drop-shadow(0 0 10px #7C3AED)"/>
+              <line x1="50" y1="6" x2="50" y2="94" stroke="rgba(255,255,255,.4)" stroke-width="1.5"/>
+              <line x1="6" y1="50" x2="94" y2="50" stroke="rgba(255,255,255,.4)" stroke-width="1.5"/>
+            </svg>
+            <div class="ev-fraction-big">
+              <span class="ev-frac-num ev-glow-pulse">1</span>
+              <div class="ev-frac-bar"></div>
+              <span class="ev-frac-den">2</span>
             </div>
           </div>
-        </div>`;
+          <div style="display:flex;gap:10px;margin-top:16px">
+            <span class="ev-label-badge" style="animation-delay:.3s">Â½ = ein halbes StÃ¼ck</span>
+          </div>
+        `;
       }
     },
-    // SZENE 5 â€“ Schokolade Â¾ (Charakter zeigt)
+
+    // SZENE 4 â€“ ErklÃ¤rung (10s)
     {
       dur: 10000,
-      bg: 'linear-gradient(160deg,#1a0035 0%,#0e0820 100%)',
-      build(stage) {
-        stage.style.justifyContent = 'flex-start';
-        stage.innerHTML = `<div class="ev-scene-split">
-          <div class="ev-split-char">${_evCharHTML('pointing')}<div class="ev-char-name-lbl">Mr. Lala</div></div>
-          <div class="ev-split-content">
-            <div class="ev-speech-bubble" style="font-size:12px">3 von 4 Teilen â€” so schreibt man das!</div>
-            <div class="ev-choco" id="evChoco" style="margin-top:14px;grid-template-columns:repeat(2,1fr)">
-              <div class="ev-choco-piece"></div><div class="ev-choco-piece"></div>
-              <div class="ev-choco-piece"></div><div class="ev-choco-piece"></div>
-            </div>
-            <div style="margin-top:12px;display:flex;flex-direction:column;align-items:center;font-family:Poppins,sans-serif;font-size:36px;font-weight:900;gap:2px;animation:evScaleIn .5s .8s both">
-              <span style="color:#FBBF24">3</span>
-              <div style="width:40px;height:4px;background:linear-gradient(90deg,#FBBF24,#F472B6);border-radius:2px"></div>
-              <span style="color:rgba(255,255,255,.85)">4</span>
-            </div>
-            <div class="ev-particles" id="evParts"></div>
+      bg: 'linear-gradient(160deg, #1a0035 0%, #0e0820 100%)',
+      build: (stage) => {
+        stage.innerHTML = `
+          <div class="ev-explain-text" style="margin-bottom:20px;font-size:15px">
+            Die <strong style="color:#FBBF24">obere Zahl</strong> = wie viele StÃ¼cke du hast.<br>
+            Die <strong style="color:#A78BFA">untere Zahl</strong> = in wie viele Teile alles geteilt wurde.
           </div>
-        </div>`;
+          <div style="position:relative;display:inline-block;animation:evScaleIn .5s .2s both">
+            <div style="display:flex;flex-direction:column;align-items:center;font-family:Poppins,sans-serif;font-size:58px;font-weight:900;gap:0">
+              <span style="color:#FBBF24;animation:evGlowPulse 1.4s infinite;text-shadow:0 0 24px #FBBF24">3</span>
+              <div style="width:60px;height:5px;background:linear-gradient(90deg,#FBBF24,#F472B6);border-radius:3px;margin:4px 0"></div>
+              <span style="color:#A78BFA;animation:evGlowPulse 1.4s .7s infinite;text-shadow:0 0 24px #A78BFA">4</span>
+            </div>
+            <!-- Arrows -->
+            <div style="position:absolute;left:-100px;top:8px;display:flex;align-items:center;gap:6px;animation:evFadeUp .5s .5s both">
+              <span style="font-family:Nunito,sans-serif;font-size:12px;color:#FBBF24;font-weight:800;white-space:nowrap">ZÃ¤hler â†—</span>
+            </div>
+            <div style="position:absolute;left:-100px;bottom:8px;display:flex;align-items:center;gap:6px;animation:evFadeUp .5s .9s both">
+              <span style="font-family:Nunito,sans-serif;font-size:12px;color:#A78BFA;font-weight:800;white-space:nowrap">Nenner â†—</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap;justify-content:center">
+            <span class="ev-label-badge" style="animation-delay:.6s;border-color:#FBBF24;color:#FBBF24">3 markierte StÃ¼cke</span>
+            <span class="ev-label-badge" style="animation-delay:.9s">Ã· 4 Teile gesamt</span>
+          </div>
+        `;
+      }
+    },
+
+    // SZENE 5 â€“ Zweites Beispiel (10s)
+    {
+      dur: 10000,
+      bg: 'linear-gradient(160deg, #1a0035 0%, #0e0820 100%)',
+      build: (stage) => {
+        const wrap = document.createElement('div');
+        wrap.innerHTML = `
+          <div class="ev-explain-text" style="margin-bottom:16px;font-size:15px">
+            Wenn du 3 von 4 Teilen hast, schreibst du das so:
+          </div>
+          <div class="ev-choco" id="evChoco">
+            <div class="ev-choco-piece"></div>
+            <div class="ev-choco-piece"></div>
+            <div class="ev-choco-piece"></div>
+            <div class="ev-choco-piece"></div>
+          </div>
+          <div style="margin-top:18px;animation:evScaleIn .5s .8s both">
+            <div class="ev-fraction-big">
+              <span class="ev-frac-num">3</span>
+              <div class="ev-frac-bar"></div>
+              <span class="ev-frac-den">4</span>
+            </div>
+          </div>
+          <div class="ev-particles" id="evParts"></div>
+        `;
+        stage.appendChild(wrap);
+        // Mark 3 of 4 with delay
         setTimeout(() => {
           const pieces = document.querySelectorAll('.ev-choco-piece');
-          [0,1,2].forEach((pi,i) => setTimeout(() => pieces[pi]?.classList.add('marked'), i*220));
+          [0,1,2].forEach((pi,i) => setTimeout(() => pieces[pi]?.classList.add('marked'), i*200));
+          // spawn particles
           const container = document.getElementById('evParts');
-          if (!container) return;
-          const colors = ['#FBBF24','#F472B6','#A78BFA','#34D399'];
-          for (let n = 0; n < 12; n++) {
-            const p = document.createElement('div');
-            p.className = 'ev-particle';
-            const angle = (n/12)*360, dist = 50 + Math.random()*40;
-            p.style.cssText = `left:${40+Math.random()*20}%;top:${40+Math.random()*20}%;background:${colors[n%colors.length]};--dx:${Math.cos(angle*Math.PI/180)*dist}px;--dy:${Math.sin(angle*Math.PI/180)*dist}px;animation-delay:${.6+n*.05}s`;
-            container.appendChild(p);
+          if (container) {
+            const colors = ['#FBBF24','#F472B6','#A78BFA','#34D399'];
+            for (let n=0; n<16; n++) {
+              const p = document.createElement('div');
+              p.className = 'ev-particle';
+              const angle = (n/16)*360;
+              const dist  = 80 + Math.random()*60;
+              p.style.cssText = `
+                left:${40+Math.random()*20}%; top:${40+Math.random()*20}%;
+                background:${colors[n%colors.length]};
+                --dx:${Math.cos(angle*Math.PI/180)*dist}px;
+                --dy:${Math.sin(angle*Math.PI/180)*dist}px;
+                animation-delay:${0.6 + n*0.04}s;
+              `;
+              container.appendChild(p);
+            }
           }
         }, 400);
       }
     },
-    // SZENE 6 â€“ Alltag (Charakter erklÃ¤rt)
+
+    // SZENE 6 â€“ Alltagsbezug (8s)
     {
-      dur: 7000,
-      bg: 'linear-gradient(160deg,#1a0035 0%,#0e0820 100%)',
-      build(stage) {
-        stage.style.justifyContent = 'flex-start';
-        stage.innerHTML = `<div class="ev-scene-split">
-          <div class="ev-split-char">${_evCharHTML('talking')}<div class="ev-char-name-lbl">Mr. Lala</div></div>
-          <div class="ev-split-content">
-            <div class="ev-speech-bubble" style="font-size:12px">BrÃ¼che begegnen dir Ã¼berall im Alltag!</div>
-            <div class="ev-food-row" style="margin-top:14px;gap:10px">
-              ${['ðŸ•','ðŸ°','ðŸ«','ðŸ¥¤'].map((e,i)=>`<div class="ev-food-icon" style="font-size:36px;animation-delay:${i*.15}s">${e}</div>`).join('')}
-            </div>
-            <div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap;animation:evFadeUp .5s .7s both">
-              <span class="ev-label-badge" style="font-size:11px">Essen teilen</span>
-              <span class="ev-label-badge" style="font-size:11px">Rezepte</span>
-            </div>
+      dur: 8000,
+      bg: 'linear-gradient(160deg, #1a0035 0%, #0e0820 100%)',
+      build: (stage) => {
+        stage.innerHTML = `
+          <div class="ev-explain-text" style="margin-bottom:20px;font-size:15px">
+            BrÃ¼che begegnen dir Ã¼berall im Alltag!
           </div>
-        </div>`;
+          <div class="ev-food-row">
+            ${['ðŸ•','ðŸ°','ðŸ«','ðŸ¥¤'].map((e,i)=>`<div class="ev-food-icon" style="animation-delay:${i*.15}s">${e}</div>`).join('')}
+          </div>
+          <div style="display:flex;gap:8px;margin-top:20px;flex-wrap:wrap;justify-content:center;animation:evFadeUp .5s .8s both">
+            <span class="ev-label-badge">Essen teilen</span>
+            <span class="ev-label-badge">Rezepte</span>
+            <span class="ev-label-badge">Mengen messen</span>
+          </div>
+        `;
       }
     },
-    // SZENE 7 â€“ Merksatz (Charakter & Karte)
+
+    // SZENE 7 â€“ Merksatz (7s)
     {
       dur: 7000,
-      bg: 'linear-gradient(160deg,#0d001a 0%,#0e0820 100%)',
-      build(stage) {
-        stage.style.justifyContent = 'flex-start';
-        stage.innerHTML = `<div class="ev-scene-split">
-          <div class="ev-split-char">${_evCharHTML('talking')}<div class="ev-char-name-lbl">Mr. Lala</div></div>
-          <div class="ev-split-content">
-            <div class="ev-merksatz" style="padding:14px 12px">
-              <h3 style="font-size:11px">ðŸ“Œ Merksatz</h3>
-              <p style="font-size:13px">Der <span class="ev-word-hl">ZÃ¤hler</span> sagt, wie viele Teile du hast.</p>
-              <p style="font-size:13px">Der <span class="ev-word-hl">Nenner</span> zeigt, in wie viele Teile alles geteilt wurde.</p>
+      bg: 'linear-gradient(160deg, #0d001a 0%, #0e0820 100%)',
+      build: (stage) => {
+        stage.innerHTML = `
+          <div class="ev-merksatz">
+            <h3>ðŸ“Œ Merksatz</h3>
+            <p>Der <span class="ev-word-hl">ZÃ¤hler</span> sagt,<br>wie viele Teile du hast.</p>
+            <p>Der <span class="ev-word-hl">Nenner</span> zeigt,<br>in wie viele Teile alles geteilt wurde.</p>
+          </div>
+          <div style="display:flex;gap:16px;margin-top:20px;justify-content:center;animation:evFadeUp .5s .5s both">
+            <div style="text-align:center">
+              <div style="font-family:Poppins,sans-serif;font-size:36px;font-weight:900;color:#FBBF24;text-shadow:0 0 20px #FBBF24">ZÃ¤hler</div>
+              <div style="font-family:Nunito,sans-serif;font-size:11px;color:rgba(255,255,255,.5);margin-top:4px">oben</div>
             </div>
-            <div style="display:flex;gap:10px;margin-top:12px;justify-content:center;animation:evFadeUp .5s .4s both">
-              <div style="text-align:center">
-                <div style="font-family:Poppins,sans-serif;font-size:22px;font-weight:900;color:#FBBF24;text-shadow:0 0 14px #FBBF24">ZÃ¤hler</div>
-                <div style="font-size:10px;color:rgba(255,255,255,.5)">oben</div>
-              </div>
-              <div style="font-size:26px;color:rgba(255,255,255,.2);padding-top:2px">Â·</div>
-              <div style="text-align:center">
-                <div style="font-family:Poppins,sans-serif;font-size:22px;font-weight:900;color:#A78BFA;text-shadow:0 0 14px #A78BFA">Nenner</div>
-                <div style="font-size:10px;color:rgba(255,255,255,.5)">unten</div>
-              </div>
+            <div style="font-size:40px;color:rgba(255,255,255,.2);padding-top:4px">Â·</div>
+            <div style="text-align:center">
+              <div style="font-family:Poppins,sans-serif;font-size:36px;font-weight:900;color:#A78BFA;text-shadow:0 0 20px #A78BFA">Nenner</div>
+              <div style="font-family:Nunito,sans-serif;font-size:11px;color:rgba(255,255,255,.5);margin-top:4px">unten</div>
             </div>
           </div>
-        </div>`;
+        `;
       }
     },
-    // SZENE 8 â€“ Outro (Charakter feiert)
+
+    // SZENE 8 â€“ Outro (5s)
     {
       dur: 5000,
-      bg: 'linear-gradient(160deg,#1a0035 0%,#0e0820 100%)',
-      build(stage) {
-        stage.style.justifyContent = 'center';
+      bg: 'linear-gradient(160deg, #1a0035 0%, #0e0820 100%)',
+      build: (stage) => {
         stage.innerHTML = `
-          <div style="display:flex;flex-direction:column;align-items:center;gap:16px">
-            <div style="animation:evBounceIn .5s cubic-bezier(.36,.07,.19,.97)">
-              ${_evCharHTML('celebrating')}
-            </div>
-            <div class="ev-outro-text" style="font-size:clamp(20px,5vw,28px)">BrÃ¼che verstanden! ðŸŽ‰</div>
-            <div class="ev-outro-next">âž¡ NÃ¤chstes Thema: BrÃ¼che addieren</div>
-          </div>`;
+          <div style="animation:evPizzaSpin 3s linear infinite;margin-bottom:20px">
+            <svg viewBox="0 0 100 100" width="80" height="80">
+              <circle cx="50" cy="50" r="44" fill="#c0392b" stroke="#922b21" stroke-width="2.5"/>
+              <path d="M50,50 L50,6 A44,44 0 0,1 94,50 Z" fill="#e74c3c"/>
+              <path d="M50,50 L94,50 A44,44 0 0,1 50,94 Z" fill="#c0392b" opacity=".8"/>
+              <line x1="50" y1="6" x2="50" y2="94" stroke="#7B241C" stroke-width="1.5"/>
+              <line x1="6" y1="50" x2="94" y2="50" stroke="#7B241C" stroke-width="1.5"/>
+            </svg>
+          </div>
+          <div class="ev-outro-text">BrÃ¼che verstanden! ðŸŽ‰</div>
+          <div class="ev-outro-next">âž¡ NÃ¤chstes Thema: BrÃ¼che addieren</div>
+        `;
       }
     }
   ]
 };
 
 // ---- Player State ----
-let _evTopicName    = '';
-let _evSceneIdx     = 0;
-let _evPaused       = false;
-let _evTimer        = null;
-let _evSceneStart   = 0;
+let _evTopicName = '';
+let _evSceneIdx  = 0;
+let _evPaused    = false;
+let _evTimer     = null;
+let _evSceneStart = 0;
 let _evSceneElapsed = 0;
 
 function openErklaerVideo(topicName) {
@@ -2332,8 +3614,10 @@ function openErklaerVideo(topicName) {
   _evSceneIdx     = 0;
   _evPaused       = false;
   _evSceneElapsed = 0;
+
   const overlay = document.getElementById('erklaerVideoOverlay');
   if (overlay) overlay.classList.remove('hidden');
+
   _evBuildDots(scenes.length);
   _evPlayScene(0);
 }
@@ -2356,6 +3640,7 @@ function _evBuildDots(count) {
   for (let i = 0; i < count; i++) {
     const d = document.createElement('div');
     d.className = 'ev-dot' + (i === 0 ? ' active' : '');
+    d.id = `evDot${i}`;
     container.appendChild(d);
   }
 }
@@ -2363,35 +3648,49 @@ function _evBuildDots(count) {
 function _evPlayScene(idx) {
   const scenes = EV_SCENES[_evTopicName];
   if (!scenes || idx >= scenes.length) { closeErklaerVideo(); return; }
+
   _evSceneIdx     = idx;
   _evSceneElapsed = 0;
   clearTimeout(_evTimer);
 
-  document.querySelectorAll('.ev-dot').forEach((d, i) => d.classList.toggle('active', i === idx));
+  // Update dots
+  document.querySelectorAll('.ev-dot').forEach((d, i) => {
+    d.classList.toggle('active', i === idx);
+  });
 
   const scene = scenes[idx];
   const stage = document.getElementById('evStage');
   if (!stage) return;
+
+  // Apply background
   stage.style.background = scene.bg || 'transparent';
   stage.innerHTML = '';
   scene.build(stage);
 
+  // Update play/pause button
   const btn = document.getElementById('evPlayPauseBtn');
   if (btn) btn.textContent = 'â¸';
-  _evPaused    = false;
+  _evPaused = false;
+
+  // Progress animation
   _evSceneStart = Date.now();
   _evTickProgress(idx, scene.dur);
+
+  // Auto-advance
   _evTimer = setTimeout(() => _evPlayScene(idx + 1), scene.dur);
 }
 
 function _evTickProgress(sceneIdx, dur) {
-  const fill   = document.getElementById('evProgressFill');
+  const fill = document.getElementById('evProgressFill');
+  if (!fill) return;
+
   const scenes = EV_SCENES[_evTopicName];
-  if (!fill || !scenes) return;
-  const totalDur = scenes.reduce((s, sc) => s + sc.dur, 0);
-  const pastDur  = scenes.slice(0, sceneIdx).reduce((s, sc) => s + sc.dur, 0);
+  if (!scenes) return;
+
   function tick() {
     if (_evSceneIdx !== sceneIdx || _evPaused) return;
+    const totalDur  = scenes.reduce((s, sc) => s + sc.dur, 0);
+    const pastDur   = scenes.slice(0, sceneIdx).reduce((s, sc) => s + sc.dur, 0);
     const elapsed   = Date.now() - _evSceneStart + _evSceneElapsed;
     const totalDone = pastDur + Math.min(elapsed, dur);
     fill.style.width = (totalDone / totalDur * 100) + '%';
@@ -2401,19 +3700,21 @@ function _evTickProgress(sceneIdx, dur) {
 }
 
 function _evTogglePause() {
-  const btn    = document.getElementById('evPlayPauseBtn');
-  const scenes = EV_SCENES[_evTopicName];
-  const scene  = scenes?.[_evSceneIdx];
-  if (!scene) return;
+  const btn = document.getElementById('evPlayPauseBtn');
   if (_evPaused) {
-    _evPaused     = false;
+    // Resume
+    _evPaused = false;
     if (btn) btn.textContent = 'â¸';
+    const scenes = EV_SCENES[_evTopicName];
+    const scene  = scenes?.[_evSceneIdx];
+    if (!scene) return;
     const remaining = scene.dur - _evSceneElapsed;
-    _evSceneStart   = Date.now();
+    _evSceneStart = Date.now();
     _evTickProgress(_evSceneIdx, scene.dur);
     _evTimer = setTimeout(() => _evPlayScene(_evSceneIdx + 1), remaining);
   } else {
-    _evPaused       = true;
+    // Pause
+    _evPaused = true;
     if (btn) btn.textContent = 'â–¶';
     _evSceneElapsed += Date.now() - _evSceneStart;
     clearTimeout(_evTimer);
